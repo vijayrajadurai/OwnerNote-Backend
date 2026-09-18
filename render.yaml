@@ -14,7 +14,8 @@ services:
     dockerfilePath: ./apps/backend/Dockerfile
     dockerContext: .
     healthCheckPath: /health
-    preDeployCommand: npx prisma migrate deploy
+    # preDeployCommand not supported on Render free tier — run migrations once
+    # manually in Render Shell after first deploy: npx prisma migrate deploy
     envVars:
       - key: NODE_ENV
         value: production
