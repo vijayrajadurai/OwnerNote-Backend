@@ -1,0 +1,35 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.local
+.env.production
+*.log
+.DS_Store
+
+# Expo
+apps/mobile/.expo/
+apps/mobile/web-build/
+apps/mobile/dist/
+
+# EAS Build — local credentials.json can hold Android keystore/iOS signing
+# material if EAS-managed credentials aren't used; never commit it.
+apps/mobile/credentials.json
+
+# Prisma
+apps/backend/prisma/dev.db
+apps/backend/prisma/dev.db-journal
+
+# Android
+apps/android-native/.gradle/
+apps/android-native/build/
+apps/android-native/app/build/
+apps/android-native/local.properties
+apps/android-native/.idea/
+apps/android-native/*.iml
+
+# IDE
+.vscode/
+.idea/
+.env.test

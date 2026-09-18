@@ -1,0 +1,28 @@
+import { prisma } from "../../db/prisma";
+import { NotFoundError } from "../../utils/errors";
+import type { Business, BusinessCategory } from "@prisma/client";
+
+export interface BusinessInput {
+  ownerName: string;
+  businessName: string;
+  category: BusinessCategory;
+  city: string;
+  runningSinceYear?: number;
+  monthlyVolumeApprox?: number;
+}
+
+export async function getBusinessForUser(userId: string): Promise<Business> {
+  const business = await prisma.business.findUnique({ where: { ownerUserId: userId } });
+  if (!business) {
+    throw new NotFoundError("Business profile not set up yet");
+  }
+  return business;
+}
+
+export async function upsertBusinessForUser(userId: string, input: BusinessInput): Promise<Business> {
+  return prisma.business.upsert({
+    where: { ownerUserId: userId },
+    create: { ownerUserId: userId, ...input },
+    update: { ...input },
+  });
+}

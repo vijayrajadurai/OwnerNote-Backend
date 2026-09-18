@@ -1,0 +1,19 @@
+{
+  "name": "ownernote-backend",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Owner Note — backend API (Express + Prisma + PostgreSQL)",
+  "workspaces": [
+    "apps/backend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/backend",
+    "start": "npm run start:dev --workspace=apps/backend",
+    "build": "npm run build --workspace=apps/backend",
+    "test": "npm run test --workspace=apps/backend",
+    "setup": "npm run prisma:generate --workspace=apps/backend && npm run prisma:deploy --workspace=apps/backend"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}

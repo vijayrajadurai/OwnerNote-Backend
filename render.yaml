@@ -1,0 +1,43 @@
+# Render Blueprint — Shop AI backend API
+#
+# Deploy: Render Dashboard → New Blueprint → connect this repo.
+# Set sync: false secrets in the Render UI after the first sync.
+#
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: shop-ai-api
+    runtime: docker
+    region: singapore
+    plan: free
+    dockerfilePath: ./apps/backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    preDeployCommand: npx prisma migrate deploy
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: TEST_LOGIN_ENABLED
+        value: "false"
+      - key: OTP_PROVIDER
+        value: msg91
+      - key: JWT_EXPIRES_IN
+        value: 30d
+      # --- Set these in the Render dashboard (secrets / per-deploy values) ---
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: MSG91_AUTH_KEY
+        sync: false
+      - key: MSG91_TEMPLATE_ID
+        sync: false
+      - key: MSG91_SENDER_ID
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false

@@ -1,0 +1,564 @@
+// Shop AI backend database schema
+// Phase 1: users, businesses.
+// Phase 2: customers, suppliers, credit/debit transactions, payments, reminders.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BusinessCategory {
+  TEXTILE
+  GROCERY
+  HARDWARE
+  ELECTRICAL
+  MOBILE_ACCESSORIES
+  AUTO_PARTS
+  FURNITURE
+  FOOTWEAR
+  PHARMACY
+  STATIONERY
+  RESTAURANT_FOOD
+  BEAUTY_SALON
+  OTHER
+}
+
+enum UserRole {
+  OWNER
+  SALES_OFFICER
+  ADMIN
+}
+
+model User {
+  id          String   @id @default(uuid())
+  phone       String   @unique
+  role        UserRole @default(OWNER)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business    Business?
+
+  // Phase 6: only populated for role=SALES_OFFICER / ADMIN users.
+  salesOfficerProfile SalesOfficerProfile?
+  assignmentsMade     LeadAssignment[]      @relation("AssignedByUser")
+  auditLogs           AuditLog[]
+
+  @@index([phone])
+}
+
+model OtpChallenge {
+  id          String   @id @default(uuid())
+  phone       String
+  codeHash    String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  attempts    Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([phone])
+}
+
+model Business {
+  id                String            @id @default(uuid())
+  ownerUserId       String            @unique
+  owner             User              @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  ownerName         String
+  businessName      String
+  category          BusinessCategory
+  city              String
+  runningSinceYear  Int?
+  monthlyVolumeApprox Decimal?        @db.Decimal(14, 2)
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  customers          Customer[]
+  suppliers          Supplier[]
+  creditTransactions CreditTransaction[]
+  debitTransactions  DebitTransaction[]
+  reminders          Reminder[]
+  aiInsights         AiInsight[]
+  businessEvents     BusinessEvent[]
+  fundingOpportunities FundingOpportunity[]
+  loanLeads          LoanLead[]
+  discoverItems      DiscoverItem[]
+
+  @@index([category])
+  @@index([city])
+}
+
+enum DiscoverItemType {
+  PRODUCT
+  OFFER
+  EVENT
+  CELEBRATION
+}
+
+// Shop news feed: products in stock, offers, events, and celebrations.
+model DiscoverItem {
+  id          String           @id @default(uuid())
+  businessId  String
+  business    Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  type        DiscoverItemType
+  title       String
+  summary     String
+  detail      String?
+  priceLabel  String?
+  validUntil  DateTime?
+  sortOrder   Int              @default(0)
+  isActive    Boolean          @default(true)
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([businessId, type, isActive])
+  @@index([businessId, sortOrder])
+}
+
+enum InsightType {
+  CASH_PRESSURE
+  PAYMENT_DUE
+  COLLECTION_DUE
+  BUSINESS_HEALTH
+  SEASONAL_PREPARATION
+  HISTORICAL_PATTERN
+  PURCHASE_PATTERN
+  UPCOMING_NEED
+}
+
+enum InsightSeverity {
+  INFO
+  WATCH
+  PRESSURE
+  HIGH_PRESSURE
+}
+
+// Persisted AI/business insights (Phase 4). Regenerated on demand from live
+// ledger data by businessInsightEngine — see src/ai/businessInsightEngine.ts.
+// Re-generation upserts by (businessId, type, dedupeKey) — a stable identity
+// separate from the (freely-changing, e.g. "due in 3 days" -> "due today")
+// display title — so a still-relevant insight keeps its row, id, and
+// read/dismissed state instead of spawning a duplicate every time its
+// wording changes.
+model AiInsight {
+  id          String          @id @default(uuid())
+  businessId  String
+  business    Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  type        InsightType
+  // Stable identity for upsert, e.g. "health", "collection-<transactionId>", "seasonal-diwali".
+  dedupeKey   String
+  title       String
+  description String
+  severity    InsightSeverity
+  confidence  Float
+  sourceRefs  Json?
+  validUntil  DateTime?
+  readAt      DateTime?
+  dismissedAt DateTime?
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([businessId, type, dedupeKey])
+  @@index([businessId, createdAt])
+  @@index([businessId, type])
+}
+
+enum BusinessEventSource {
+  CSV_IMPORT
+  XLSX_IMPORT
+  ACCOUNTING_EXPORT
+  MANUAL
+}
+
+enum BusinessEventType {
+  STOCK_PURCHASE
+  SALE
+  EXPENSE
+  OTHER
+}
+
+// Historical business data points that predate this app's own transaction
+// history (or were never entered here) — the intended landing table for a
+// future CSV/XLSX/accounting-export importer. Historical comparisons treat
+// rows here the same as real CreditTransaction/DebitTransaction data; until
+// an import exists, this stays empty and comparisons honestly say so rather
+// than fabricating a number.
+model BusinessEvent {
+  id          String              @id @default(uuid())
+  businessId  String
+  business    Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  eventType   BusinessEventType
+  amount      Decimal             @db.Decimal(14, 2)
+  occurredAt  DateTime
+  source      BusinessEventSource
+  description String?
+
+  createdAt   DateTime            @default(now())
+
+  @@index([businessId, eventType, occurredAt])
+}
+
+enum TransactionStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+}
+
+model Customer {
+  id          String   @id @default(uuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name        String
+  phone       String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions CreditTransaction[]
+
+  @@index([businessId])
+  @@index([businessId, name])
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name        String
+  phone       String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions DebitTransaction[]
+
+  @@index([businessId])
+  @@index([businessId, name])
+}
+
+model CreditTransaction {
+  id          String            @id @default(uuid())
+  businessId  String
+  business    Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  amount      Decimal           @db.Decimal(14, 2)
+  paidAmount  Decimal           @default(0) @db.Decimal(14, 2)
+  description String?
+  dueDate     DateTime?
+  status      TransactionStatus @default(PENDING)
+
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  payments    Payment[]
+
+  @@index([businessId, status])
+  @@index([businessId, dueDate])
+  @@index([customerId])
+}
+
+model DebitTransaction {
+  id          String            @id @default(uuid())
+  businessId  String
+  business    Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  supplierId  String
+  supplier    Supplier          @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  amount      Decimal           @db.Decimal(14, 2)
+  paidAmount  Decimal           @default(0) @db.Decimal(14, 2)
+  description String?
+  dueDate     DateTime?
+  status      TransactionStatus @default(PENDING)
+
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  payments    Payment[]
+
+  @@index([businessId, status])
+  @@index([businessId, dueDate])
+  @@index([supplierId])
+}
+
+model Payment {
+  id                  String             @id @default(uuid())
+  amount              Decimal            @db.Decimal(14, 2)
+  note                String?
+  createdAt           DateTime           @default(now())
+
+  creditTransactionId String?
+  creditTransaction   CreditTransaction? @relation(fields: [creditTransactionId], references: [id], onDelete: Cascade)
+
+  debitTransactionId  String?
+  debitTransaction    DebitTransaction?  @relation(fields: [debitTransactionId], references: [id], onDelete: Cascade)
+
+  @@index([creditTransactionId])
+  @@index([debitTransactionId])
+}
+
+model Reminder {
+  id          String   @id @default(uuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  title       String
+  dueDate     DateTime
+  isDone      Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([businessId, dueDate])
+}
+
+// ---- Phase 5: funding opportunity detection & warm loan leads ----
+
+enum FundingOpportunityType {
+  WORKING_CAPITAL
+  SEASONAL_STOCK
+  SUPPLIER_PAYMENT
+  LARGE_PURCHASE
+  EXPANSION
+  LARGE_ORDER
+  OTHER
+}
+
+enum FundingUrgency {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum FundingOpportunityStatus {
+  DETECTED
+  SHOWN
+  INTERESTED
+  NOT_NOW
+  EXPIRED
+  CONVERTED_TO_LEAD
+}
+
+// A detected, explainable funding situation — never shown as a loan ad,
+// always paired with the business reason. Regenerated on demand by
+// fundingOpportunityDetector.ts and upserted by (businessId, type,
+// dedupeKey), same pattern as AiInsight: a still-relevant opportunity keeps
+// its row/id/status instead of duplicating, and once a user has responded
+// (NOT_NOW/INTERESTED/CONVERTED_TO_LEAD) a refresh never silently resets
+// that back to DETECTED — see funding.service.ts's cooldown logic.
+model FundingOpportunity {
+  id          String                   @id @default(uuid())
+  businessId  String
+  business    Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  type        FundingOpportunityType
+  dedupeKey   String
+  title       String
+  explanation String
+
+  estimatedRequirement   Decimal?      @db.Decimal(14, 2)
+  estimatedAvailableCash Decimal?      @db.Decimal(14, 2)
+  estimatedGap           Decimal?      @db.Decimal(14, 2)
+
+  urgency     FundingUrgency
+  confidence  Float
+  signalScore Int
+  // FundingSignal[] — see src/ai/types.ts.
+  sourceSignals Json
+
+  status      FundingOpportunityStatus @default(DETECTED)
+  respondedAt DateTime?
+
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  expiresAt   DateTime?
+
+  loanLead    LoanLead?
+
+  @@unique([businessId, type, dedupeKey])
+  @@index([businessId, status])
+}
+
+enum LeadStatus {
+  NEW
+  QUALIFIED
+  ASSIGNED
+  CONTACTED
+  VISIT_SCHEDULED
+  VISITED
+  APPLICATION_STARTED
+  APPROVED
+  DISBURSED
+  NOT_INTERESTED
+  REJECTED
+  FOLLOW_UP
+}
+
+enum LeadSource {
+  FUNDING_OPPORTUNITY
+  MANUAL
+}
+
+enum UserIntent {
+  EXPLORE_OPTIONS
+  TALK_TO_SOMEONE
+}
+
+// Created only after explicit user consent (never merely because an
+// opportunity was detected). Carries the full attribution chain back to
+// the AI signals that produced it — see aiDetectedReason and
+// leadScoreExplanation — so a sales officer (Phase 6) receives "why this
+// customer is interested," not a bare phone number.
+model LoanLead {
+  id         String     @id @default(uuid())
+  businessId String
+  business   Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  // Denormalized copy of business.ownerUserId for convenient lookup — Business already owns the enforced FK.
+  ownerId    String
+
+  opportunityId String?  @unique
+  opportunity   FundingOpportunity? @relation(fields: [opportunityId], references: [id])
+
+  ownerName            String
+  businessName         String
+  phone                String
+  businessCategory     BusinessCategory
+  businessDurationYears Int?
+  city                 String
+
+  fundingRequirementMin     Decimal? @db.Decimal(14, 2)
+  fundingRequirementMax     Decimal? @db.Decimal(14, 2)
+  workingCapitalRequirement Decimal? @db.Decimal(14, 2)
+  fundingReason             String
+  preferredCallbackTime     String?
+  userIntent                UserIntent
+
+  aiDetectedReason     String
+  leadScore            Int
+  // LeadScoreBreakdown — see src/ai/types.ts.
+  leadScoreExplanation Json
+
+  status LeadStatus @default(NEW)
+  source LeadSource @default(FUNDING_OPPORTUNITY)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Phase 6
+  assignments LeadAssignment[]
+  visits      VisitRecord[]
+
+  @@index([businessId])
+  @@index([status])
+}
+
+// ---- Phase 6: field sales officer + admin web dashboard ----
+
+// A sales officer or admin's operator profile. Only exists for
+// role=SALES_OFFICER/ADMIN Users — owners never get one. Admin reads FOs
+// from this table (never hardcoded) when building the assignment UI.
+model SalesOfficerProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  territory String?
+  active    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments LeadAssignment[]
+  visits      VisitRecord[]
+
+  @@index([active])
+}
+
+// Reassignment history is never destroyed — reassigning a lead deactivates
+// the current row (unassignedAt set, active=false) and creates a new one,
+// so "who had this lead and when" stays fully reconstructable.
+model LeadAssignment {
+  id             String              @id @default(uuid())
+  leadId         String
+  lead           LoanLead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  salesOfficerId String
+  salesOfficer   SalesOfficerProfile @relation(fields: [salesOfficerId], references: [id], onDelete: Cascade)
+
+  assignedByUserId String
+  assignedBy       User   @relation("AssignedByUser", fields: [assignedByUserId], references: [id])
+
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+  active       Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leadId, active])
+  @@index([salesOfficerId, active])
+}
+
+enum VisitOutcome {
+  SCHEDULED
+  VISITED
+  CUSTOMER_INTERESTED
+  CUSTOMER_NOT_INTERESTED
+  FOLLOW_UP_REQUIRED
+  APPLICATION_STARTED
+  NOT_CONTACTABLE
+  CANCELLED
+}
+
+// Doubles as the follow-up system: nextFollowUpAt is what "upcoming
+// follow-ups" queries key off, rather than a separate FollowUp table.
+model VisitRecord {
+  id             String              @id @default(uuid())
+  leadId         String
+  lead           LoanLead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  salesOfficerId String
+  salesOfficer   SalesOfficerProfile @relation(fields: [salesOfficerId], references: [id], onDelete: Cascade)
+
+  scheduledAt    DateTime?
+  visitedAt      DateTime?
+  outcome        VisitOutcome @default(SCHEDULED)
+  notes          String?
+  nextFollowUpAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leadId])
+  @@index([salesOfficerId, nextFollowUpAt])
+}
+
+// Minimal, generic audit trail for important admin/FO actions (assignment,
+// reassignment, status changes). Not a full event-sourcing log — just
+// enough for "who did what to which lead, and when."
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String
+  actor       User     @relation(fields: [actorUserId], references: [id])
+
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt])
+}
