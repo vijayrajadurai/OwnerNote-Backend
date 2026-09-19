@@ -14,6 +14,7 @@ import { suppliersRouter } from "./modules/suppliers/suppliers.routes";
 import { transactionsRouter } from "./modules/transactions/transactions.routes";
 import { remindersRouter } from "./modules/reminders/reminders.routes";
 import { voiceRouter } from "./modules/voice/voice.routes";
+import { ocrRouter } from "./modules/ocr/ocr.routes";
 import {
   cashFlowRouter,
   businessHealthRouter,
@@ -83,6 +84,7 @@ export function createApp(): Express {
   app.use("/transactions", transactionsRouter);
   app.use("/reminders", remindersRouter);
   app.use("/voice", voiceRouter);
+  app.use("/ocr", ocrRouter);
   app.use("/cashflow", cashFlowRouter);
   app.use("/business-health", businessHealthRouter);
   app.use("/priorities", prioritiesRouter);
