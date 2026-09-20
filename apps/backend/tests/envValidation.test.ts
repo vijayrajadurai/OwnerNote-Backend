@@ -57,6 +57,28 @@ describe("environment configuration validation", () => {
     expect(env.OTP_PROVIDER).toBe("console");
   });
 
+  it("allows OTP_PROVIDER=firebase in production when Admin credentials are set", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.OTP_PROVIDER = "firebase";
+    process.env.FIREBASE_PROJECT_ID = "owner-note";
+    process.env.FIREBASE_CLIENT_EMAIL = "firebase-adminsdk@owner-note.iam.gserviceaccount.com";
+    process.env.FIREBASE_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----\\nfake\\n-----END PRIVATE KEY-----\\n";
+
+    const { env } = await importFreshEnv();
+    expect(env.OTP_PROVIDER).toBe("firebase");
+  });
+
+  it("rejects OTP_PROVIDER=firebase in production without Admin credentials", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.OTP_PROVIDER = "firebase";
+    delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    delete process.env.FIREBASE_PROJECT_ID;
+    delete process.env.FIREBASE_CLIENT_EMAIL;
+    delete process.env.FIREBASE_PRIVATE_KEY;
+
+    await expect(importFreshEnv()).rejects.toThrow(/OTP_PROVIDER=firebase requires/);
+  });
+
   it("rejects OTP_PROVIDER=console in production", async () => {
     process.env.NODE_ENV = "production";
     process.env.OTP_PROVIDER = "console";

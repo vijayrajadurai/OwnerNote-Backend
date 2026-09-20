@@ -26,13 +26,21 @@ services:
       - key: TEST_LOGIN_ENABLED
         value: "false"
       - key: OTP_PROVIDER
-        value: msg91
+        value: firebase
       - key: JWT_EXPIRES_IN
         value: 30d
       # --- Set these in the Render dashboard (secrets / per-deploy values) ---
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
         sync: false
       - key: MSG91_AUTH_KEY
         sync: false

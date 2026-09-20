@@ -3,7 +3,7 @@ import rateLimit from "express-rate-limit";
 import { env } from "../../config/env";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
-import { getMe, sendOtp, testLoginHandler, verifyOtpHandler } from "./auth.controller";
+import { firebaseLoginHandler, getMe, sendOtp, testLoginHandler, verifyOtpHandler } from "./auth.controller";
 
 // Rate limiting is disabled under test so the suite isn't at the mercy of
 // shared-IP throttling; it stays fully active in development/production.
@@ -43,5 +43,6 @@ export const authRouter = Router();
 
 authRouter.post("/send-otp", otpRequestLimiter, asyncHandler(sendOtp));
 authRouter.post("/verify-otp", otpVerifyLimiter, asyncHandler(verifyOtpHandler));
+authRouter.post("/firebase", otpVerifyLimiter, asyncHandler(firebaseLoginHandler));
 authRouter.post("/test-login", testLoginLimiter, asyncHandler(testLoginHandler));
 authRouter.get("/me", requireAuth, asyncHandler(getMe));

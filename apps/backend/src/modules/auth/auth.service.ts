@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../../db/prisma";
 import { env } from "../../config/env";
 import { getOtpProvider } from "./otp.provider";
+import { verifyFirebasePhoneIdToken } from "./firebase.admin";
 import { signAuthToken } from "../../utils/jwt";
 import { NotFoundError, UnauthorizedError, ValidationError } from "../../utils/errors";
 
@@ -19,7 +20,24 @@ function generateCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+async function issueSessionForPhone(phone: string): Promise<{ token: string; isNewUser: boolean }> {
+  let user = await prisma.user.findUnique({ where: { phone } });
+  let isNewUser = false;
+  if (!user) {
+    user = await prisma.user.create({ data: { phone } });
+    isNewUser = true;
+  }
+
+  const token = signAuthToken({ userId: user.id, role: user.role });
+  return { token, isNewUser };
+}
+
 export async function requestOtp(rawPhone: string): Promise<{ phone: string; expiresInSeconds: number }> {
+  if (env.OTP_PROVIDER === "firebase") {
+    throw new ValidationError(
+      "OTP is sent by Firebase on the device. After the SMS code is verified, POST /auth/firebase with the Firebase ID token.",
+    );
+  }
   const phone = normalizePhone(rawPhone);
   const code = generateCode();
   const codeHash = await bcrypt.hash(code, 10);
@@ -69,15 +87,12 @@ export async function verifyOtp(rawPhone: string, code: string): Promise<{ token
     data: { consumedAt: new Date() },
   });
 
-  let user = await prisma.user.findUnique({ where: { phone } });
-  let isNewUser = false;
-  if (!user) {
-    user = await prisma.user.create({ data: { phone } });
-    isNewUser = true;
-  }
+  return issueSessionForPhone(phone);
+}
 
-  const token = signAuthToken({ userId: user.id, role: user.role });
-  return { token, isNewUser };
+export async function loginWithFirebaseIdToken(idToken: string): Promise<{ token: string; isNewUser: boolean }> {
+  const { phone } = await verifyFirebasePhoneIdToken(idToken);
+  return issueSessionForPhone(normalizePhone(phone));
 }
 
 // Fixed, non-phone identifier for the single test-login account — kept
@@ -93,15 +108,7 @@ export async function testLogin(username: string, password: string): Promise<{ t
     throw new UnauthorizedError("Incorrect test login username or password.");
   }
 
-  let user = await prisma.user.findUnique({ where: { phone: TEST_LOGIN_PHONE } });
-  let isNewUser = false;
-  if (!user) {
-    user = await prisma.user.create({ data: { phone: TEST_LOGIN_PHONE } });
-    isNewUser = true;
-  }
-
-  const token = signAuthToken({ userId: user.id, role: user.role });
-  return { token, isNewUser };
+  return issueSessionForPhone(TEST_LOGIN_PHONE);
 }
 
 export async function getMe(userId: string) {

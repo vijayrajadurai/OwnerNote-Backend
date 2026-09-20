@@ -67,6 +67,10 @@ export function getOtpProvider(): OtpProvider {
       return new Msg91OtpProvider();
     case "twilio":
       return new TwilioOtpProvider();
+    case "firebase":
+      throw new Error(
+        "OTP_PROVIDER=firebase does not send SMS from the server. The Android app verifies the phone with Firebase, then calls POST /auth/firebase.",
+      );
     case "console":
     default:
       return new ConsoleOtpProvider();

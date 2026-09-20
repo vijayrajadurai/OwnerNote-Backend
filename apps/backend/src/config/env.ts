@@ -22,6 +22,22 @@ const PRODUCTION_MIN_JWT_SECRET_LENGTH = 32;
 // too, without being so strict that a real random secret could ever trip it.
 const PRODUCTION_MIN_JWT_SECRET_CHAR_VARIETY = 8;
 
+export function hasFirebaseAdminCredentials(data: {
+  FIREBASE_SERVICE_ACCOUNT_JSON?: string;
+  FIREBASE_PROJECT_ID?: string;
+  FIREBASE_CLIENT_EMAIL?: string;
+  FIREBASE_PRIVATE_KEY?: string;
+}): boolean {
+  if (data.FIREBASE_SERVICE_ACCOUNT_JSON && data.FIREBASE_SERVICE_ACCOUNT_JSON.trim().length > 0) {
+    return true;
+  }
+  return Boolean(
+    data.FIREBASE_PROJECT_ID?.trim() &&
+      data.FIREBASE_CLIENT_EMAIL?.trim() &&
+      data.FIREBASE_PRIVATE_KEY?.trim(),
+  );
+}
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -29,9 +45,16 @@ const envSchema = z
     DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
     JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
     JWT_EXPIRES_IN: z.string().default("30d"),
-    OTP_PROVIDER: z.enum(["console", "msg91", "twilio"]).default("console"),
+    OTP_PROVIDER: z.enum(["console", "msg91", "twilio", "firebase"]).default("console"),
     OTP_TTL_SECONDS: z.coerce.number().default(300),
     OTP_MAX_ATTEMPTS: z.coerce.number().default(5),
+    // Firebase Admin — used to verify Phone Auth ID tokens from the Android app.
+    // Prefer FIREBASE_SERVICE_ACCOUNT_JSON (the downloaded service-account file
+    // as a single string) or the three split fields below.
+    FIREBASE_PROJECT_ID: z.string().optional(),
+    FIREBASE_CLIENT_EMAIL: z.string().optional(),
+    FIREBASE_PRIVATE_KEY: z.string().optional(),
+    FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
     MSG91_AUTH_KEY: z.string().optional(),
     MSG91_TEMPLATE_ID: z.string().optional(),
     MSG91_SENDER_ID: z.string().optional(),
@@ -108,8 +131,19 @@ const envSchema = z
         path: ["OTP_PROVIDER"],
         message:
           "OTP_PROVIDER=console is not allowed when NODE_ENV=production (it prints OTP codes to the server log, " +
-          "which would let anyone with log access sign in as any user). Set OTP_PROVIDER to msg91 or twilio and " +
-          "supply the matching credentials.",
+          "which would let anyone with log access sign in as any user). Set OTP_PROVIDER to firebase, msg91, or twilio " +
+          "and supply the matching credentials.",
+      });
+    }
+
+    if (data.OTP_PROVIDER === "firebase" && !hasFirebaseAdminCredentials(data)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["FIREBASE_PROJECT_ID"],
+        message:
+          "OTP_PROVIDER=firebase requires FIREBASE_SERVICE_ACCOUNT_JSON or " +
+          "FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY " +
+          "(the service account you generated in Firebase for token verification).",
       });
     }
 

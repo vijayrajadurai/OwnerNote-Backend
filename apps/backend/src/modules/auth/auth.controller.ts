@@ -17,6 +17,10 @@ const testLoginSchema = z.object({
   password: z.string().min(1),
 });
 
+const firebaseLoginSchema = z.object({
+  idToken: z.string().min(20),
+});
+
 export async function sendOtp(req: Request, res: Response): Promise<void> {
   const { phone } = sendOtpSchema.parse(req.body);
   const result = await authService.requestOtp(phone);
@@ -26,6 +30,12 @@ export async function sendOtp(req: Request, res: Response): Promise<void> {
 export async function verifyOtpHandler(req: Request, res: Response): Promise<void> {
   const { phone, code } = verifyOtpSchema.parse(req.body);
   const result = await authService.verifyOtp(phone, code);
+  res.status(200).json({ data: result });
+}
+
+export async function firebaseLoginHandler(req: Request, res: Response): Promise<void> {
+  const { idToken } = firebaseLoginSchema.parse(req.body);
+  const result = await authService.loginWithFirebaseIdToken(idToken);
   res.status(200).json({ data: result });
 }
 
