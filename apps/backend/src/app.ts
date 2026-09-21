@@ -30,6 +30,7 @@ import { assignmentsRouter } from "./modules/assignments/assignments.routes";
 import { leadVisitsRouter, visitsRouter } from "./modules/visits/visits.routes";
 import { adminRouter } from "./modules/admin/admin.routes";
 import { adminDiscoverRouter, discoverRouter } from "./modules/discover/discover.routes";
+import { dailyCashRouter } from "./modules/daily-cash/daily-cash.routes";
 
 // Bearer tokens and cookies must never reach application logs. Exported so
 // tests can exercise this exact configuration against a real pino-http
@@ -93,6 +94,7 @@ export function createApp(): Express {
   app.use("/historical-insights", historicalInsightsRouter);
   app.use("/ask-my-business", askMyBusinessRouter);
   app.use("/discover", discoverRouter);
+  app.use("/daily-cash", dailyCashRouter);
   app.use("/admin/discover", adminDiscoverRouter);
   app.use("/funding-opportunities", fundingOpportunitiesRouter);
   app.use("/loan-leads", loanLeadsRouter);

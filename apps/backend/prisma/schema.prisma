@@ -87,6 +87,7 @@ model Business {
   fundingOpportunities FundingOpportunity[]
   loanLeads          LoanLead[]
   discoverItems      DiscoverItem[]
+  dailyCashReports   DailyCashReport[]
 
   @@index([category])
   @@index([city])
@@ -542,6 +543,53 @@ model VisitRecord {
 
   @@index([leadId])
   @@index([salesOfficerId, nextFollowUpAt])
+}
+
+enum DailyCashEntryType {
+  IN
+  OUT
+}
+
+enum DailyCashPaymentMode {
+  CASH
+  UPI
+}
+
+// End-of-day cash movement report submitted from the Owner Note app.
+// Isolated from credit/debit ledger — tracks real cash/UPI in/out only.
+model DailyCashReport {
+  id          String   @id @default(uuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  date        String
+  totalIn     Decimal  @db.Decimal(14, 2)
+  totalOut    Decimal  @db.Decimal(14, 2)
+  net         Decimal  @db.Decimal(14, 2)
+  cashIn      Decimal  @db.Decimal(14, 2)
+  cashOut     Decimal  @db.Decimal(14, 2)
+  upiIn       Decimal  @db.Decimal(14, 2)
+  upiOut      Decimal  @db.Decimal(14, 2)
+  submittedAt DateTime @default(now())
+
+  entries     DailyCashReportEntry[]
+
+  @@unique([businessId, date])
+  @@index([businessId, date])
+}
+
+model DailyCashReportEntry {
+  id             String              @id @default(uuid())
+  reportId       String
+  report         DailyCashReport     @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  type           DailyCashEntryType
+  amount         Decimal             @db.Decimal(14, 2)
+  paymentMode    DailyCashPaymentMode
+  note           String?
+  entryCreatedAt DateTime
+
+  @@index([reportId])
 }
 
 // Minimal, generic audit trail for important admin/FO actions (assignment,
