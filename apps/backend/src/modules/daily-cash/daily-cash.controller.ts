@@ -11,7 +11,9 @@ const entrySchema = z.object({
   amount: z.number().positive(),
   paymentMode: z.enum(["CASH", "UPI"]),
   note: z.string().max(500).nullable().optional(),
-  createdAt: z.string().datetime(),
+  createdAt: z
+    .string()
+    .refine((value) => !Number.isNaN(Date.parse(value)), "Invalid ISO datetime"),
 });
 
 const submitReportSchema = z.object({

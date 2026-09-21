@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { AppError } from "../utils/errors";
 import { logger } from "../utils/logger";
@@ -17,6 +18,17 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   if (err instanceof ZodError) {
     res.status(400).json({
       error: { code: "VALIDATION_ERROR", message: "Invalid request", details: err.flatten() },
+    });
+    return;
+  }
+
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2021") {
+    logger.error({ err, path: req.path }, "Prisma table missing — run prisma migrate deploy");
+    res.status(503).json({
+      error: {
+        code: "MIGRATION_REQUIRED",
+        message: "Database is missing required tables. Run prisma migrate deploy on the server.",
+      },
     });
     return;
   }
