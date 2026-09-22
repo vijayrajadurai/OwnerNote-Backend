@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import * as remindersService from "./reminders.service";
 import * as businessService from "../business/business.service";
+import * as pushService from "../devices/push.service";
 import { UnauthorizedError } from "../../utils/errors";
 
 const createReminderSchema = z.object({
@@ -25,6 +26,13 @@ export async function createReminder(req: Request, res: Response): Promise<void>
   const businessId = await requireBusinessId(req);
   const { title, dueDate } = createReminderSchema.parse(req.body);
   const reminder = await remindersService.createReminder(businessId, title, dueDate);
+  void pushService
+    .sendPushToUser(req.auth!.userId, {
+      title: "Owner Note reminder",
+      body: title,
+      data: { type: "reminder", reminderId: reminder.id },
+    })
+    .catch(() => undefined);
   res.status(201).json({ data: reminder });
 }
 

@@ -39,6 +39,8 @@ const auditLogQuerySchema = z.object({
   limit: z.coerce.number().int().positive().optional(),
 });
 
+export { adminSendPush as sendPush } from "../devices/devices.controller";
+
 export async function listAuditLog(req: Request, res: Response): Promise<void> {
   const { page, limit } = auditLogQuerySchema.parse(req.query);
   const result = await adminService.listAuditLog(page ?? 1, Math.min(limit ?? 25, 100));

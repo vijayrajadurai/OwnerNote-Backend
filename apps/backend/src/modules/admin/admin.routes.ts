@@ -12,3 +12,4 @@ adminRouter.get("/sales-officers/:id/performance", asyncHandler(controller.getSa
 adminRouter.get("/sales-officers-performance", asyncHandler(controller.listAllSalesOfficerPerformance));
 adminRouter.get("/analytics", asyncHandler(controller.getPipelineAnalytics));
 adminRouter.get("/audit-log", asyncHandler(controller.listAuditLog));
+adminRouter.post("/push", asyncHandler(controller.sendPush));

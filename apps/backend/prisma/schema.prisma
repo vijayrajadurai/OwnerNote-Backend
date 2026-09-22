@@ -46,8 +46,23 @@ model User {
   salesOfficerProfile SalesOfficerProfile?
   assignmentsMade     LeadAssignment[]      @relation("AssignedByUser")
   auditLogs           AuditLog[]
+  deviceTokens        DeviceToken[]
 
   @@index([phone])
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  token     String   @unique
+  platform  String   @default("ANDROID")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model OtpChallenge {

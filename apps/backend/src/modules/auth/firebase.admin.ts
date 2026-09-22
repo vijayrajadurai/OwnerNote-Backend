@@ -1,5 +1,6 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getMessaging, type Messaging } from "firebase-admin/messaging";
 import { env, hasFirebaseAdminCredentials } from "../../config/env";
 import { ServiceUnavailableError, UnauthorizedError } from "../../utils/errors";
 
@@ -68,5 +69,15 @@ export async function verifyFirebasePhoneIdToken(idToken: string): Promise<Fireb
       throw err;
     }
     throw new UnauthorizedError("Invalid or expired Firebase ID token.");
+  }
+}
+
+export function tryGetFirebaseMessaging(): Messaging | null {
+  if (!hasFirebaseAdminCredentials(env)) return null;
+  try {
+    initFirebaseAdmin();
+    return getMessaging();
+  } catch {
+    return null;
   }
 }
