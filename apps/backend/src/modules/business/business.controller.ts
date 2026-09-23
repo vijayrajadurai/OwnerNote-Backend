@@ -26,6 +26,10 @@ const businessSchema = z.object({
   city: z.string().min(2).max(100),
   runningSinceYear: z.number().int().min(1950).max(new Date().getFullYear()).optional(),
   monthlyVolumeApprox: z.number().nonnegative().optional(),
+  latitude: z.number().gte(-90).lte(90).nullish(),
+  longitude: z.number().gte(-180).lte(180).nullish(),
+  areaLabel: z.string().min(1).max(150).nullish(),
+  locationSource: z.enum(["GPS", "MANUAL"]).nullish(),
 });
 
 function requireUserId(req: Request): string {

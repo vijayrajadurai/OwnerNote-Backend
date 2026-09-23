@@ -71,6 +71,8 @@ COPY --from=build /app/apps/backend/dist ./apps/backend/dist
 # prisma migrate deploy` to have something to deploy — it is not read by
 # the running application itself.
 COPY --from=build /app/apps/backend/prisma ./apps/backend/prisma
+COPY apps/backend/scripts/start-prod.sh ./apps/backend/scripts/start-prod.sh
+RUN chmod +x /app/apps/backend/scripts/start-prod.sh
 # The Prisma Client generated in the build stage (schema-specific JS +
 # native query-engine binary) lives under node_modules/.prisma, separate
 # from the @prisma/client package itself — prod-deps's `npm ci --omit=dev`
@@ -95,5 +97,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # rather than draining them — documented here, not silently assumed.
 STOPSIGNAL SIGTERM
 
-# Same command as `npm start` (package.json) — unchanged.
-CMD ["node", "dist/index.js"]
+# Same command as `npm start` after applying pending Prisma migrations.
+CMD ["./scripts/start-prod.sh"]

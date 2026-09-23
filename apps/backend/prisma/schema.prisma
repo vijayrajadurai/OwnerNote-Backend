@@ -89,6 +89,11 @@ model Business {
   runningSinceYear  Int?
   monthlyVolumeApprox Decimal?        @db.Decimal(14, 2)
 
+  latitude          Float?
+  longitude         Float?
+  areaLabel         String?
+  locationSource    LocationSource?
+
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -103,6 +108,7 @@ model Business {
   loanLeads          LoanLead[]
   discoverItems      DiscoverItem[]
   dailyCashReports   DailyCashReport[]
+  groupBuyingRequests GroupBuyingRequest[]
 
   @@index([category])
   @@index([city])
@@ -624,4 +630,76 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([actorUserId, createdAt])
+}
+
+enum LocationSource {
+  GPS
+  MANUAL
+}
+
+enum GroupBuyingRequestStatus {
+  ACTIVE
+  MATCHED
+  JOINED
+  CLOSED
+  CANCELLED
+}
+
+enum GroupBuyingGroupStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum GroupBuyingMemberStatus {
+  PENDING
+  JOINED
+  CONFIRMED
+  DECLINED
+  CANCELLED
+}
+
+model GroupBuyingRequest {
+  id           String                   @id @default(uuid())
+  businessId   String
+  business     Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  productId    String
+  quantity     Float
+  unit         String
+  requiredDate String
+  latitude     Float
+  longitude    Float
+  areaLabel    String
+  radiusKm     Float
+  status       GroupBuyingRequestStatus @default(ACTIVE)
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  @@index([productId, status, requiredDate])
+  @@index([businessId])
+}
+
+model GroupBuyingGroup {
+  id           String                 @id @default(uuid())
+  productId    String
+  requiredDate String
+  areaLabel    String
+  status       GroupBuyingGroupStatus @default(ACTIVE)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  members      GroupBuyingMember[]
+}
+
+model GroupBuyingMember {
+  id         String                   @id @default(uuid())
+  groupId    String
+  group      GroupBuyingGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  requestId  String
+  businessId String
+  quantity   Float
+  status     GroupBuyingMemberStatus  @default(PENDING)
+  joinedAt   DateTime                 @default(now())
+
+  @@index([groupId])
+  @@index([requestId])
+  @@index([businessId])
 }

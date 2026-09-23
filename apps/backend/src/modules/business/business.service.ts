@@ -9,6 +9,10 @@ export interface BusinessInput {
   city: string;
   runningSinceYear?: number;
   monthlyVolumeApprox?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  areaLabel?: string | null;
+  locationSource?: "GPS" | "MANUAL" | null;
 }
 
 export async function getBusinessForUser(userId: string): Promise<Business> {
