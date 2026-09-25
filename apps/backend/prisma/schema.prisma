@@ -108,6 +108,7 @@ model Business {
   loanLeads          LoanLead[]
   discoverItems      DiscoverItem[]
   dailyCashReports   DailyCashReport[]
+  dailyCashOpenings  DailyCashOpening[]
   groupBuyingRequests GroupBuyingRequest[]
 
   @@index([category])
@@ -589,11 +590,26 @@ model DailyCashReport {
   net         Decimal  @db.Decimal(14, 2)
   cashIn      Decimal  @db.Decimal(14, 2)
   cashOut     Decimal  @db.Decimal(14, 2)
-  upiIn       Decimal  @db.Decimal(14, 2)
-  upiOut      Decimal  @db.Decimal(14, 2)
-  submittedAt DateTime @default(now())
+  upiIn           Decimal  @db.Decimal(14, 2)
+  upiOut          Decimal  @db.Decimal(14, 2)
+  openingBalance  Decimal  @default(0) @db.Decimal(14, 2)
+  submittedAt     DateTime @default(now())
 
   entries     DailyCashReportEntry[]
+
+  @@unique([businessId, date])
+  @@index([businessId, date])
+}
+
+// Physical cash-box (kallapetti) opening for a calendar date. Entered fresh each day.
+model DailyCashOpening {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  date      String
+  amount    Decimal  @db.Decimal(14, 2)
+  updatedAt DateTime @updatedAt
 
   @@unique([businessId, date])
   @@index([businessId, date])

@@ -25,7 +25,13 @@ const submitReportSchema = z.object({
   cashOut: z.number().min(0),
   upiIn: z.number().min(0),
   upiOut: z.number().min(0),
+  openingBalance: z.number().min(0).optional(),
   entries: z.array(entrySchema).min(1),
+});
+
+const upsertOpeningSchema = z.object({
+  date: dateKeySchema,
+  openingBalance: z.number().min(0),
 });
 
 async function requireBusinessId(req: Request): Promise<string> {
@@ -52,4 +58,18 @@ export async function getDailyCashReport(req: Request, res: Response): Promise<v
   const date = dateKeySchema.parse(req.params.date);
   const report = await dailyCashService.getDailyCashReport(businessId, date);
   res.status(200).json({ data: report });
+}
+
+export async function upsertDailyCashOpening(req: Request, res: Response): Promise<void> {
+  const businessId = await requireBusinessId(req);
+  const body = upsertOpeningSchema.parse(req.body);
+  const opening = await dailyCashService.upsertDailyCashOpening(businessId, body);
+  res.status(200).json({ data: opening });
+}
+
+export async function getDailyCashOpening(req: Request, res: Response): Promise<void> {
+  const businessId = await requireBusinessId(req);
+  const date = dateKeySchema.parse(req.params.date);
+  const opening = await dailyCashService.getDailyCashOpening(businessId, date);
+  res.status(200).json({ data: opening });
 }

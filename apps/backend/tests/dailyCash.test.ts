@@ -19,6 +19,7 @@ describe("daily cash reports", () => {
       cashOut: 30,
       upiIn: 200,
       upiOut: 70,
+      openingBalance: 1500,
       entries: [
         {
           type: "IN",
@@ -52,6 +53,36 @@ describe("daily cash reports", () => {
       .expect(200);
 
     expect(getRes.body.data.totalIn).toBe(300);
+    expect(getRes.body.data.openingBalance).toBe(1500);
+  });
+
+  it("stores kallapetti opening for a date without carrying another day", async () => {
+    const token = await authenticate(app, "+919876543212");
+    await setUpBusiness(app, token);
+
+    await request(app)
+      .put("/daily-cash/openings")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ date: "2026-09-24", openingBalance: 2000 })
+      .expect(200);
+
+    await request(app)
+      .put("/daily-cash/openings")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ date: "2026-09-25", openingBalance: 500 })
+      .expect(200);
+
+    const day24 = await request(app)
+      .get("/daily-cash/openings/2026-09-24")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+    const day25 = await request(app)
+      .get("/daily-cash/openings/2026-09-25")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(day24.body.data.openingBalance).toBe(2000);
+    expect(day25.body.data.openingBalance).toBe(500);
   });
 
   it("upserts the same date idempotently", async () => {

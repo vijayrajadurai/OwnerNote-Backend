@@ -19,7 +19,13 @@ export type SubmitDailyCashReportInput = {
   cashOut: number;
   upiIn: number;
   upiOut: number;
+  openingBalance?: number;
   entries: SubmitDailyCashEntryInput[];
+};
+
+export type UpsertDailyCashOpeningInput = {
+  date: string;
+  openingBalance: number;
 };
 
 function mapReport(report: {
@@ -33,6 +39,7 @@ function mapReport(report: {
   cashOut: Prisma.Decimal;
   upiIn: Prisma.Decimal;
   upiOut: Prisma.Decimal;
+  openingBalance: Prisma.Decimal;
   submittedAt: Date;
   entries: Array<{
     id: string;
@@ -54,6 +61,7 @@ function mapReport(report: {
     cashOut: Number(report.cashOut),
     upiIn: Number(report.upiIn),
     upiOut: Number(report.upiOut),
+    openingBalance: Number(report.openingBalance),
     submittedAt: report.submittedAt.toISOString(),
     entries: report.entries.map((entry) => ({
       id: entry.id,
@@ -66,7 +74,42 @@ function mapReport(report: {
   };
 }
 
+function mapOpening(row: { date: string; amount: Prisma.Decimal; updatedAt: Date }) {
+  return {
+    date: row.date,
+    openingBalance: Number(row.amount),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export async function upsertDailyCashOpening(
+  businessId: string,
+  input: UpsertDailyCashOpeningInput,
+) {
+  const row = await prisma.dailyCashOpening.upsert({
+    where: { businessId_date: { businessId, date: input.date } },
+    create: {
+      businessId,
+      date: input.date,
+      amount: input.openingBalance,
+    },
+    update: {
+      amount: input.openingBalance,
+    },
+  });
+  return mapOpening(row);
+}
+
+export async function getDailyCashOpening(businessId: string, date: string) {
+  const row = await prisma.dailyCashOpening.findUnique({
+    where: { businessId_date: { businessId, date } },
+  });
+  if (!row) throw new NotFoundError("Daily cash opening not found");
+  return mapOpening(row);
+}
+
 export async function submitDailyCashReport(businessId: string, input: SubmitDailyCashReportInput) {
+  const openingBalance = input.openingBalance ?? 0;
   const report = await prisma.$transaction(async (tx) => {
     const existing = await tx.dailyCashReport.findUnique({
       where: { businessId_date: { businessId, date: input.date } },
@@ -85,6 +128,7 @@ export async function submitDailyCashReport(businessId: string, input: SubmitDai
           cashOut: input.cashOut,
           upiIn: input.upiIn,
           upiOut: input.upiOut,
+          openingBalance,
           submittedAt: new Date(),
           entries: {
             create: input.entries.map((entry) => ({
@@ -112,6 +156,7 @@ export async function submitDailyCashReport(businessId: string, input: SubmitDai
         cashOut: input.cashOut,
         upiIn: input.upiIn,
         upiOut: input.upiOut,
+        openingBalance,
         entries: {
           create: input.entries.map((entry) => ({
             type: entry.type,
@@ -125,6 +170,13 @@ export async function submitDailyCashReport(businessId: string, input: SubmitDai
       include: { entries: true },
     });
   });
+
+  if (input.openingBalance != null) {
+    await upsertDailyCashOpening(businessId, {
+      date: input.date,
+      openingBalance: input.openingBalance,
+    });
+  }
 
   return mapReport(report);
 }
