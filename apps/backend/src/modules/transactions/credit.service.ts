@@ -11,6 +11,7 @@ export interface CreateCreditInput {
   amount: number;
   description?: string;
   dueDate?: string;
+  transactionDate?: string;
 }
 
 export interface UpdateCreditInput {
@@ -43,6 +44,7 @@ export async function createCredit(businessId: string, input: CreateCreditInput)
       amount: input.amount,
       description: input.description,
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
+      transactionDate: input.transactionDate ? new Date(input.transactionDate) : null,
     },
     include: { customer: true },
   });

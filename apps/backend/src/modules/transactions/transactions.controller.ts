@@ -13,6 +13,9 @@ const createCreditSchema = z.object({
   amount: z.number().positive(),
   description: z.string().max(500).optional(),
   dueDate: z.string().datetime().optional(),
+  // Free-First Manual Entry (Quick Add) — when this sale actually
+  // happened (Today/Yesterday/Custom), distinct from createdAt.
+  transactionDate: z.string().datetime().optional(),
 });
 
 const createDebitSchema = z.object({
@@ -21,6 +24,7 @@ const createDebitSchema = z.object({
   amount: z.number().positive(),
   description: z.string().max(500).optional(),
   dueDate: z.string().datetime().optional(),
+  transactionDate: z.string().datetime().optional(),
 });
 
 const updateSchema = z.object({

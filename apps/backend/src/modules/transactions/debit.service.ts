@@ -11,6 +11,7 @@ export interface CreateDebitInput {
   amount: number;
   description?: string;
   dueDate?: string;
+  transactionDate?: string;
 }
 
 export interface UpdateDebitInput {
@@ -43,6 +44,7 @@ export async function createDebit(businessId: string, input: CreateDebitInput) {
       amount: input.amount,
       description: input.description,
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
+      transactionDate: input.transactionDate ? new Date(input.transactionDate) : null,
     },
     include: { supplier: true },
   });
