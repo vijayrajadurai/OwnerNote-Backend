@@ -4,7 +4,6 @@ import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from ".
 import { logger } from "../../utils/logger";
 import { sendPushToUser } from "../devices/push.service";
 import {
-  computeGroupTotals,
   dateWindow,
   findDuplicateRequest,
   findNearbyMatches,
@@ -430,7 +429,7 @@ export async function listInbox(businessId: string) {
 
 export type RespondInviteInput = {
   interested: boolean;
-  quantity?: number;
+  quantity?: number | null;
 };
 
 export async function respondToInvite(businessId: string, inviteId: string, input: RespondInviteInput) {
