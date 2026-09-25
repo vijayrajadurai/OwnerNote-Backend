@@ -39,11 +39,11 @@ function requireUserId(req: Request): string {
 
 export async function getMyBusiness(req: Request, res: Response): Promise<void> {
   const business = await businessService.getBusinessForUser(requireUserId(req));
-  res.status(200).json({ data: business });
+  res.status(200).json({ data: await businessService.withOwnerPhone(business) });
 }
 
 export async function putMyBusiness(req: Request, res: Response): Promise<void> {
   const input = businessSchema.parse(req.body);
   const business = await businessService.upsertBusinessForUser(requireUserId(req), input);
-  res.status(200).json({ data: business });
+  res.status(200).json({ data: await businessService.withOwnerPhone(business) });
 }

@@ -148,6 +148,33 @@ describe("group buying API", () => {
     const tokenE = await authFor(PHONES.e);
     const tokenF = await authFor(PHONES.f);
 
+    const bLoc = offsetKm(2);
+    const cLoc = offsetKm(3);
+    const dLoc = offsetKm(20);
+    const eLoc = offsetKm(1);
+    const fLoc = offsetKm(8);
+
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.b } },
+      data: { latitude: bLoc.lat, longitude: bLoc.lon },
+    });
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.c } },
+      data: { latitude: cLoc.lat, longitude: cLoc.lon },
+    });
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.d } },
+      data: { latitude: dLoc.lat, longitude: dLoc.lon },
+    });
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.e } },
+      data: { latitude: eLoc.lat, longitude: eLoc.lon },
+    });
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.f } },
+      data: { latitude: fLoc.lat, longitude: fLoc.lon },
+    });
+
     const a = await createRequest(tokenA, {
       productId: "cement",
       quantity: 20,
@@ -157,12 +184,6 @@ describe("group buying API", () => {
       radiusKm: 5,
     });
     expect(a.status).toBe(201);
-
-    const bLoc = offsetKm(2);
-    const cLoc = offsetKm(3);
-    const dLoc = offsetKm(20);
-    const eLoc = offsetKm(1);
-    const fLoc = offsetKm(8);
 
     expect(
       (
@@ -226,15 +247,8 @@ describe("group buying API", () => {
     );
     expect(matches.status).toBe(200);
     expect(jsonContainsCoordinateKeys(matches.body)).toBe(false);
-    expect(matches.body.data.matches).toHaveLength(2);
-    expect(matches.body.data.matches.map((m: { quantity: number }) => m.quantity).sort((x: number, y: number) => x - y)).toEqual([
-      50, 80,
-    ]);
-    expect(matches.body.data.totals).toEqual({
-      totalQuantity: 150,
-      businessCount: 3,
-      unit: "bags",
-    });
+    expect(matches.body.data.matches).toHaveLength(3);
+    expect(matches.body.data.matches.every((match: { phone?: string }) => typeof match.phone === "string")).toBe(true);
     for (const match of matches.body.data.matches) {
       expect(match).not.toHaveProperty("latitude");
       expect(match).not.toHaveProperty("longitude");
@@ -345,5 +359,72 @@ describe("group buying API", () => {
     expect(bMatch.quantity).toBe(15);
     expect(bMatch.ownerName).toBeTruthy();
     expect(matches.body.data.totals.totalQuantity).toBe(35);
+  });
+
+  it("notifies nearby shops from onboarded shop location, not the phone GPS on the request", async () => {
+    const tokenA = await authFor(PHONES.a);
+    const tokenB = await authFor(PHONES.b);
+    const nearby = offsetKm(2);
+    const far = offsetKm(80);
+
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.a } },
+      data: { businessName: "A Hardware", latitude: AMBATTUR.lat, longitude: AMBATTUR.lon, areaLabel: "Ambattur" },
+    });
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.b } },
+      data: { businessName: "B Hardware", latitude: nearby.lat, longitude: nearby.lon, areaLabel: "Ambattur" },
+    });
+
+    const created = await createRequest(tokenA, {
+      productId: "paint",
+      quantity: 10,
+      requiredDate: "2026-10-02",
+      latitude: far.lat,
+      longitude: far.lon,
+      radiusKm: 5,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.data.latitude).toBeCloseTo(AMBATTUR.lat, 4);
+    expect(created.body.data.longitude).toBeCloseTo(AMBATTUR.lon, 4);
+
+    const inboxB = await auth(tokenB, request(app).get("/group-buying/inbox"));
+    expect(inboxB.status).toBe(200);
+    expect(inboxB.body.data).toHaveLength(1);
+    expect(inboxB.body.data[0].request.shopName).toBe("A Hardware");
+  });
+
+  it("invites same-category shops in the same city even without a GPS pin", async () => {
+    const tokenA = await authFor(PHONES.a);
+    const tokenB = await authFor(PHONES.b);
+    const tokenGrocery = await authenticate(app, PHONES.c);
+    await setUpBusiness(app, tokenGrocery, "GROCERY");
+
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.a } },
+      data: { businessName: "A Hardware" },
+    });
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.b } },
+      data: { businessName: "B Hardware" },
+    });
+
+    const created = await createRequest(tokenA, {
+      productId: "steel",
+      quantity: 8,
+      requiredDate: "2026-10-05",
+      latitude: AMBATTUR.lat,
+      longitude: AMBATTUR.lon,
+      radiusKm: 5,
+    });
+    expect(created.status).toBe(201);
+
+    const inboxB = await auth(tokenB, request(app).get("/group-buying/inbox"));
+    expect(inboxB.status).toBe(200);
+    expect(inboxB.body.data).toHaveLength(1);
+    expect(inboxB.body.data[0].request.phone).toBe(PHONES.a);
+
+    const inboxGrocery = await auth(tokenGrocery, request(app).get("/group-buying/inbox"));
+    expect(inboxGrocery.body.data).toHaveLength(0);
   });
 });

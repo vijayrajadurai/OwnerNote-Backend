@@ -42,14 +42,30 @@ describe("group buying match DTO privacy", () => {
     const sample: GroupBuyingMatchPublic = {
       requestId: "r1",
       businessId: "b1",
+      shopName: "Test Shop",
+      ownerName: "Kumar",
+      phone: "+919876543210",
       areaLabel: "Ambattur",
       quantity: 50,
       unit: "bags",
       requiredDate: "2026-09-30",
       distanceKm: 2.0,
+      interestStatus: "PENDING",
     };
     expect(Object.keys(sample).sort()).toEqual(
-      ["areaLabel", "businessId", "distanceKm", "quantity", "requestId", "requiredDate", "unit"].sort(),
+      [
+        "areaLabel",
+        "businessId",
+        "distanceKm",
+        "interestStatus",
+        "ownerName",
+        "phone",
+        "quantity",
+        "requestId",
+        "requiredDate",
+        "shopName",
+        "unit",
+      ].sort(),
     );
   });
 });

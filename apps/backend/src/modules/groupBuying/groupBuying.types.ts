@@ -8,6 +8,7 @@ export type GroupBuyingMatchPublic = {
   businessId: string;
   shopName: string;
   ownerName: string;
+  phone: string;
   areaLabel: string;
   quantity: number;
   unit: string;

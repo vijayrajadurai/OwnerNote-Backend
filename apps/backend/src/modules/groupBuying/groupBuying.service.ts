@@ -43,6 +43,16 @@ function toMatchable(row: GroupBuyingRequest): MatchableGroupBuyingRequest {
   };
 }
 
+function sameLocalArea(
+  origin: { city?: string | null; areaLabel?: string | null },
+  shop: { city?: string | null; areaLabel?: string | null },
+): boolean {
+  const normalize = (value?: string | null) => value?.trim().toLowerCase() ?? "";
+  const originKeys = [normalize(origin.city), normalize(origin.areaLabel)].filter((value) => value.length >= 2);
+  const shopKeys = [normalize(shop.city), normalize(shop.areaLabel)].filter((value) => value.length >= 2);
+  return originKeys.some((key) => shopKeys.includes(key));
+}
+
 function serializeOwnRequest(row: GroupBuyingRequest) {
   return {
     id: row.id,
@@ -63,7 +73,7 @@ function serializeOwnRequest(row: GroupBuyingRequest) {
 
 function toPublicMatch(
   match: MatchableGroupBuyingRequest & { distanceKm: number },
-  shop: { businessName: string; ownerName: string },
+  shop: { businessName: string; ownerName: string; phone?: string | null },
   interestStatus = "POSTED",
 ): GroupBuyingMatchPublic {
   return {
@@ -71,6 +81,7 @@ function toPublicMatch(
     businessId: match.businessId,
     shopName: shop.businessName,
     ownerName: shop.ownerName,
+    phone: shop.phone ?? "",
     areaLabel: match.areaLabel,
     quantity: match.quantity,
     unit: match.unit,
@@ -93,18 +104,36 @@ export async function createRequest(businessId: string, input: CreateGroupBuying
     throw new ConflictError("An active group-buying request already exists for this product and date.");
   }
 
-  await prisma.business.update({
-    where: { id: businessId },
-    data: {
-      latitude: input.latitude,
-      longitude: input.longitude,
-      areaLabel: input.areaLabel,
-      locationSource: "GPS",
-    },
-  });
+  const shop = await prisma.business.findUnique({ where: { id: businessId } });
+  if (!shop) throw new NotFoundError("Business profile not set up yet");
+
+  let latitude = input.latitude;
+  let longitude = input.longitude;
+  let areaLabel = input.areaLabel;
+  const storedLat = shop.latitude;
+  const storedLon = shop.longitude;
+  const hasStoredShopLocation =
+    storedLat != null && storedLon != null && !(storedLat === 0 && storedLon === 0);
+  if (storedLat != null && storedLon != null && hasStoredShopLocation) {
+    latitude = storedLat;
+    longitude = storedLon;
+    if (shop.areaLabel?.trim()) areaLabel = shop.areaLabel.trim();
+  }
+
+  if (!hasStoredShopLocation) {
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        latitude: input.latitude,
+        longitude: input.longitude,
+        areaLabel: input.areaLabel,
+        locationSource: "GPS",
+      },
+    });
+  }
 
   const created = await prisma.groupBuyingRequest.create({
-    data: { businessId, ...input },
+    data: { businessId, ...input, latitude, longitude, areaLabel },
   });
   await fanOutCategoryInvites(created);
   return serializeOwnRequest(created);
@@ -142,13 +171,24 @@ export async function listMatches(businessId: string, requestId: string): Promis
   const nearby = findNearbyMatches(origin, candidates.map(toMatchable));
   const shops = await prisma.business.findMany({
     where: { id: { in: nearby.map((row) => row.businessId) } },
-    select: { id: true, businessName: true, ownerName: true },
+    select: { id: true, businessName: true, ownerName: true, owner: { select: { phone: true } } },
   });
   const shopById = new Map(shops.map((shop) => [shop.id, shop]));
 
   const invites = await prisma.groupBuyingInvite.findMany({
     where: { requestId },
-    include: { business: { select: { id: true, businessName: true, ownerName: true, latitude: true, longitude: true } } },
+    include: {
+      business: {
+        select: {
+          id: true,
+          businessName: true,
+          ownerName: true,
+          latitude: true,
+          longitude: true,
+          owner: { select: { phone: true } },
+        },
+      },
+    },
   });
 
   const inviteMatches: GroupBuyingMatchPublic[] = invites.map((invite) => {
@@ -162,6 +202,7 @@ export async function listMatches(businessId: string, requestId: string): Promis
       businessId: invite.businessId,
       shopName: invite.business.businessName,
       ownerName: invite.business.ownerName,
+      phone: invite.business.owner.phone,
       areaLabel: origin.areaLabel,
       quantity: qty,
       unit: origin.unit,
@@ -179,6 +220,7 @@ export async function listMatches(businessId: string, requestId: string): Promis
       return toPublicMatch(match, {
         businessName: shop?.businessName ?? "Nearby shop",
         ownerName: shop?.ownerName ?? "",
+        phone: shop?.owner.phone ?? "",
       });
     });
 
@@ -345,21 +387,26 @@ async function fanOutCategoryInvites(request: GroupBuyingRequest) {
     where: {
       id: { not: request.businessId },
       category: origin.category,
-      latitude: { not: null },
-      longitude: { not: null },
     },
     select: {
       id: true,
       ownerUserId: true,
       businessName: true,
+      city: true,
+      areaLabel: true,
       latitude: true,
       longitude: true,
     },
   });
 
+  const originLat = origin.latitude ?? request.latitude;
+  const originLon = origin.longitude ?? request.longitude;
+
   const nearby = candidates.filter((shop) => {
-    if (shop.latitude == null || shop.longitude == null) return false;
-    return haversineKm(request.latitude, request.longitude, shop.latitude, shop.longitude) <= request.radiusKm;
+    if (shop.latitude != null && shop.longitude != null) {
+      return haversineKm(originLat, originLon, shop.latitude, shop.longitude) <= request.radiusKm;
+    }
+    return sameLocalArea(origin, shop);
   });
 
   for (const shop of nearby) {
@@ -394,7 +441,15 @@ export async function listInbox(businessId: string) {
     include: {
       request: {
         include: {
-          business: { select: { businessName: true, ownerName: true, latitude: true, longitude: true } },
+          business: {
+            select: {
+              businessName: true,
+              ownerName: true,
+              latitude: true,
+              longitude: true,
+              owner: { select: { phone: true } },
+            },
+          },
         },
       },
       business: { select: { latitude: true, longitude: true } },
@@ -422,6 +477,7 @@ export async function listInbox(businessId: string) {
         areaLabel: row.request.areaLabel,
         shopName: origin.businessName,
         ownerName: origin.ownerName,
+        phone: origin.owner.phone,
       },
     };
   });

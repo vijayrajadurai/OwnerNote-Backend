@@ -30,3 +30,11 @@ export async function upsertBusinessForUser(userId: string, input: BusinessInput
     update: { ...input },
   });
 }
+
+export async function withOwnerPhone<T extends Business>(business: T): Promise<T & { phone: string | null }> {
+  const owner = await prisma.user.findUnique({
+    where: { id: business.ownerUserId },
+    select: { phone: true },
+  });
+  return { ...business, phone: owner?.phone ?? null };
+}
