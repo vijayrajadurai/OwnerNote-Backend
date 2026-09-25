@@ -7,8 +7,10 @@ import {
   cancelHandler,
   createRequestHandler,
   joinHandler,
+  listInboxHandler,
   listMatchesHandler,
   listRequestsHandler,
+  respondInviteHandler,
 } from "./groupBuying.controller";
 
 const skipInTest = () => env.NODE_ENV === "test";
@@ -27,6 +29,8 @@ export const groupBuyingRouter = Router();
 groupBuyingRouter.use(requireAuth);
 groupBuyingRouter.post("/requests", createRequestLimiter, asyncHandler(createRequestHandler));
 groupBuyingRouter.get("/requests", asyncHandler(listRequestsHandler));
+groupBuyingRouter.get("/inbox", asyncHandler(listInboxHandler));
+groupBuyingRouter.post("/invites/:id/respond", asyncHandler(respondInviteHandler));
 groupBuyingRouter.get("/requests/:id/matches", asyncHandler(listMatchesHandler));
 groupBuyingRouter.post("/requests/:id/join", asyncHandler(joinHandler));
 groupBuyingRouter.post("/requests/:id/cancel", asyncHandler(cancelHandler));

@@ -110,6 +110,7 @@ model Business {
   dailyCashReports   DailyCashReport[]
   dailyCashOpenings  DailyCashOpening[]
   groupBuyingRequests GroupBuyingRequest[]
+  groupBuyingInvites  GroupBuyingInvite[]
 
   @@index([category])
   @@index([city])
@@ -674,6 +675,12 @@ enum GroupBuyingMemberStatus {
   CANCELLED
 }
 
+enum GroupBuyingInviteStatus {
+  PENDING
+  INTERESTED
+  NOT_INTERESTED
+}
+
 model GroupBuyingRequest {
   id           String                   @id @default(uuid())
   businessId   String
@@ -689,9 +696,25 @@ model GroupBuyingRequest {
   status       GroupBuyingRequestStatus @default(ACTIVE)
   createdAt    DateTime                 @default(now())
   updatedAt    DateTime                 @updatedAt
+  invites      GroupBuyingInvite[]
 
   @@index([productId, status, requiredDate])
   @@index([businessId])
+}
+
+model GroupBuyingInvite {
+  id         String                   @id @default(uuid())
+  requestId  String
+  request    GroupBuyingRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  status     GroupBuyingInviteStatus  @default(PENDING)
+  quantity   Float?
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+
+  @@unique([requestId, businessId])
+  @@index([businessId, status])
 }
 
 model GroupBuyingGroup {

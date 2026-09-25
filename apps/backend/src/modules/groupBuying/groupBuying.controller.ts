@@ -49,6 +49,24 @@ export async function listMatchesHandler(req: Request, res: Response): Promise<v
   res.status(200).json({ data: result });
 }
 
+export async function listInboxHandler(req: Request, res: Response): Promise<void> {
+  const businessId = await requireBusinessId(req);
+  const rows = await groupBuyingService.listInbox(businessId);
+  res.status(200).json({ data: rows });
+}
+
+const respondInviteSchema = z.object({
+  interested: z.boolean(),
+  quantity: z.number().positive().nullish(),
+});
+
+export async function respondInviteHandler(req: Request, res: Response): Promise<void> {
+  const businessId = await requireBusinessId(req);
+  const body = respondInviteSchema.parse(req.body);
+  const result = await groupBuyingService.respondToInvite(businessId, req.params.id, body);
+  res.status(200).json({ data: result });
+}
+
 export async function joinHandler(req: Request, res: Response): Promise<void> {
   const businessId = await requireBusinessId(req);
   const result = await groupBuyingService.joinGroup(businessId, req.params.id);

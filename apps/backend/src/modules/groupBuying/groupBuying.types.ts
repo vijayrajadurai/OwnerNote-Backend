@@ -6,11 +6,14 @@
 export type GroupBuyingMatchPublic = {
   requestId: string;
   businessId: string;
+  shopName: string;
+  ownerName: string;
   areaLabel: string;
   quantity: number;
   unit: string;
   requiredDate: string;
   distanceKm: number;
+  interestStatus: string;
 };
 
 export type GroupBuyingTotals = {

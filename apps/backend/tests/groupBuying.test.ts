@@ -28,6 +28,7 @@ function jsonContainsCoordinateKeys(value: unknown): boolean {
 }
 
 async function resetData() {
+  await prisma.groupBuyingInvite.deleteMany({});
   await prisma.groupBuyingMember.deleteMany({});
   await prisma.groupBuyingGroup.deleteMany({});
   await prisma.groupBuyingRequest.deleteMany({});
@@ -283,5 +284,66 @@ describe("group buying API", () => {
     );
     expect(cancelled.status).toBe(200);
     expect(cancelled.body.data.status).toBe("CANCELLED");
+  });
+
+  it("invites nearby same-category shops and records interest with quantity", async () => {
+    const tokenA = await authFor(PHONES.a);
+    const tokenB = await authFor(PHONES.b);
+    const tokenGrocery = await authenticate(app, PHONES.c);
+    await setUpBusiness(app, tokenGrocery, "GROCERY");
+
+    const nearby = offsetKm(2);
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.a } },
+      data: { businessName: "A Hardware", latitude: AMBATTUR.lat, longitude: AMBATTUR.lon },
+    });
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.b } },
+      data: { businessName: "B Hardware", latitude: nearby.lat, longitude: nearby.lon },
+    });
+    await prisma.business.updateMany({
+      where: { owner: { phone: PHONES.c } },
+      data: { businessName: "C Grocery", latitude: nearby.lat, longitude: nearby.lon },
+    });
+
+    const created = await createRequest(tokenA, {
+      productId: "cement",
+      quantity: 20,
+      requiredDate: "2026-09-30",
+      latitude: AMBATTUR.lat,
+      longitude: AMBATTUR.lon,
+      radiusKm: 5,
+    });
+    expect(created.status).toBe(201);
+
+    const inboxB = await auth(tokenB, request(app).get("/group-buying/inbox"));
+    expect(inboxB.status).toBe(200);
+    expect(inboxB.body.data).toHaveLength(1);
+    expect(inboxB.body.data[0].request.shopName).toBe("A Hardware");
+    expect(inboxB.body.data[0].request.quantity).toBe(20);
+    expect(jsonContainsCoordinateKeys(inboxB.body)).toBe(false);
+
+    const inboxGrocery = await auth(tokenGrocery, request(app).get("/group-buying/inbox"));
+    expect(inboxGrocery.body.data).toHaveLength(0);
+
+    const inviteId = inboxB.body.data[0].id as string;
+    const responded = await auth(tokenB, request(app).post(`/group-buying/invites/${inviteId}/respond`)).send({
+      interested: true,
+      quantity: 15,
+    });
+    expect(responded.status).toBe(200);
+    expect(responded.body.data.status).toBe("INTERESTED");
+    expect(responded.body.data.quantity).toBe(15);
+
+    const matches = await auth(
+      tokenA,
+      request(app).get(`/group-buying/requests/${created.body.data.id}/matches`),
+    );
+    expect(matches.status).toBe(200);
+    const bMatch = matches.body.data.matches.find((row: { shopName: string }) => row.shopName === "B Hardware");
+    expect(bMatch.interestStatus).toBe("INTERESTED");
+    expect(bMatch.quantity).toBe(15);
+    expect(bMatch.ownerName).toBeTruthy();
+    expect(matches.body.data.totals.totalQuantity).toBe(35);
   });
 });

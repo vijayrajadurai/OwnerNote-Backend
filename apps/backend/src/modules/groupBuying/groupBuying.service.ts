@@ -1,11 +1,14 @@
 import type { GroupBuyingRequest, Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../utils/errors";
+import { logger } from "../../utils/logger";
+import { sendPushToUser } from "../devices/push.service";
 import {
   computeGroupTotals,
   dateWindow,
   findDuplicateRequest,
   findNearbyMatches,
+  haversineKm,
   roundDistanceKm,
 } from "./groupBuying.logic";
 import type {
@@ -61,15 +64,20 @@ function serializeOwnRequest(row: GroupBuyingRequest) {
 
 function toPublicMatch(
   match: MatchableGroupBuyingRequest & { distanceKm: number },
+  shop: { businessName: string; ownerName: string },
+  interestStatus = "POSTED",
 ): GroupBuyingMatchPublic {
   return {
     requestId: match.id,
     businessId: match.businessId,
+    shopName: shop.businessName,
+    ownerName: shop.ownerName,
     areaLabel: match.areaLabel,
     quantity: match.quantity,
     unit: match.unit,
     requiredDate: match.requiredDate,
     distanceKm: roundDistanceKm(match.distanceKm),
+    interestStatus,
   };
 }
 
@@ -86,9 +94,20 @@ export async function createRequest(businessId: string, input: CreateGroupBuying
     throw new ConflictError("An active group-buying request already exists for this product and date.");
   }
 
+  await prisma.business.update({
+    where: { id: businessId },
+    data: {
+      latitude: input.latitude,
+      longitude: input.longitude,
+      areaLabel: input.areaLabel,
+      locationSource: "GPS",
+    },
+  });
+
   const created = await prisma.groupBuyingRequest.create({
     data: { businessId, ...input },
   });
+  await fanOutCategoryInvites(created);
   return serializeOwnRequest(created);
 }
 
@@ -121,10 +140,64 @@ export async function listMatches(businessId: string, requestId: string): Promis
     },
   });
 
-  const matches = findNearbyMatches(origin, candidates.map(toMatchable));
+  const nearby = findNearbyMatches(origin, candidates.map(toMatchable));
+  const shops = await prisma.business.findMany({
+    where: { id: { in: nearby.map((row) => row.businessId) } },
+    select: { id: true, businessName: true, ownerName: true },
+  });
+  const shopById = new Map(shops.map((shop) => [shop.id, shop]));
+
+  const invites = await prisma.groupBuyingInvite.findMany({
+    where: { requestId },
+    include: { business: { select: { id: true, businessName: true, ownerName: true, latitude: true, longitude: true } } },
+  });
+
+  const inviteMatches: GroupBuyingMatchPublic[] = invites.map((invite) => {
+    const distanceKm =
+      invite.business.latitude != null && invite.business.longitude != null
+        ? haversineKm(origin.latitude, origin.longitude, invite.business.latitude, invite.business.longitude)
+        : 0;
+    const qty = invite.status === "INTERESTED" && invite.quantity != null ? invite.quantity : origin.quantity;
+    return {
+      requestId: origin.id,
+      businessId: invite.businessId,
+      shopName: invite.business.businessName,
+      ownerName: invite.business.ownerName,
+      areaLabel: origin.areaLabel,
+      quantity: qty,
+      unit: origin.unit,
+      requiredDate: origin.requiredDate,
+      distanceKm: roundDistanceKm(distanceKm),
+      interestStatus: invite.status,
+    };
+  });
+
+  const invitedIds = new Set(inviteMatches.map((row) => row.businessId));
+  const postedMatches = nearby
+    .filter((match) => !invitedIds.has(match.businessId))
+    .map((match) => {
+      const shop = shopById.get(match.businessId);
+      return toPublicMatch(match, {
+        businessName: shop?.businessName ?? "Nearby shop",
+        ownerName: shop?.ownerName ?? "",
+      });
+    });
+
+  const matches = [...inviteMatches, ...postedMatches].sort((a, b) => a.distanceKm - b.distanceKm);
+  const interestedQty = inviteMatches
+    .filter((row) => row.interestStatus === "INTERESTED")
+    .reduce((sum, row) => sum + row.quantity, 0);
+  const postedQty = postedMatches.reduce((sum, row) => sum + row.quantity, 0);
+  const extraCount =
+    inviteMatches.filter((row) => row.interestStatus === "INTERESTED").length + postedMatches.length;
+
   return {
-    matches: matches.map(toPublicMatch),
-    totals: computeGroupTotals(origin, matches),
+    matches,
+    totals: {
+      totalQuantity: origin.quantity + interestedQty + postedQty,
+      businessCount: extraCount + 1,
+      unit: origin.unit,
+    },
   };
 }
 
@@ -196,8 +269,7 @@ export async function joinGroup(businessId: string, requestId: string) {
       joinedAt: member.joinedAt.toISOString(),
     })),
     request: serializeOwnRequest(result.request),
-    matches: matches.map(toPublicMatch),
-    totals: computeGroupTotals(origin, matches),
+    ...(await listMatches(businessId, requestId)),
   };
 }
 
@@ -264,4 +336,165 @@ async function upsertMember(
       status,
     },
   });
+}
+
+async function fanOutCategoryInvites(request: GroupBuyingRequest) {
+  const origin = await prisma.business.findUnique({ where: { id: request.businessId } });
+  if (!origin) return;
+
+  const candidates = await prisma.business.findMany({
+    where: {
+      id: { not: request.businessId },
+      category: origin.category,
+      latitude: { not: null },
+      longitude: { not: null },
+    },
+    select: {
+      id: true,
+      ownerUserId: true,
+      businessName: true,
+      latitude: true,
+      longitude: true,
+    },
+  });
+
+  const nearby = candidates.filter((shop) => {
+    if (shop.latitude == null || shop.longitude == null) return false;
+    return haversineKm(request.latitude, request.longitude, shop.latitude, shop.longitude) <= request.radiusKm;
+  });
+
+  for (const shop of nearby) {
+    const invite = await prisma.groupBuyingInvite.upsert({
+      where: { requestId_businessId: { requestId: request.id, businessId: shop.id } },
+      create: { requestId: request.id, businessId: shop.id, status: "PENDING" },
+      update: {},
+    });
+    if (invite.status !== "PENDING") continue;
+    try {
+      await sendPushToUser(shop.ownerUserId, {
+        title: "Group buying nearby",
+        body: `${origin.businessName} needs ${request.quantity} ${request.unit} of ${request.productId}. Interested?`,
+        data: {
+          type: "GROUP_BUYING_INVITE",
+          requestId: request.id,
+          inviteId: invite.id,
+        },
+      });
+    } catch (error) {
+      logger.warn({ err: error, shopId: shop.id }, "Could not send group-buying invite push");
+    }
+  }
+}
+
+export async function listInbox(businessId: string) {
+  const rows = await prisma.groupBuyingInvite.findMany({
+    where: {
+      businessId,
+      request: { status: { in: ["ACTIVE", "MATCHED"] } },
+    },
+    include: {
+      request: {
+        include: {
+          business: { select: { businessName: true, ownerName: true, latitude: true, longitude: true } },
+        },
+      },
+      business: { select: { latitude: true, longitude: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return rows.map((row) => {
+    const origin = row.request.business;
+    const distanceKm =
+      origin.latitude != null && origin.longitude != null && row.business.latitude != null && row.business.longitude != null
+        ? haversineKm(origin.latitude, origin.longitude, row.business.latitude, row.business.longitude)
+        : haversineKm(row.request.latitude, row.request.longitude, row.business.latitude ?? row.request.latitude, row.business.longitude ?? row.request.longitude);
+    return {
+      id: row.id,
+      status: row.status,
+      quantity: row.quantity,
+      distanceKm: roundDistanceKm(distanceKm),
+      request: {
+        id: row.request.id,
+        productId: row.request.productId,
+        quantity: row.request.quantity,
+        unit: row.request.unit,
+        requiredDate: row.request.requiredDate,
+        areaLabel: row.request.areaLabel,
+        shopName: origin.businessName,
+        ownerName: origin.ownerName,
+      },
+    };
+  });
+}
+
+export type RespondInviteInput = {
+  interested: boolean;
+  quantity?: number;
+};
+
+export async function respondToInvite(businessId: string, inviteId: string, input: RespondInviteInput) {
+  const invite = await prisma.groupBuyingInvite.findFirst({
+    where: { id: inviteId, businessId },
+    include: { request: true },
+  });
+  if (!invite) throw new NotFoundError("Group buying invite not found");
+  if (invite.request.status === "CANCELLED" || invite.request.status === "CLOSED") {
+    throw new ValidationError("This request is no longer active.");
+  }
+  if (input.interested) {
+    if (input.quantity == null || input.quantity <= 0) {
+      throw new ValidationError("Enter how many pieces or units you want.");
+    }
+  }
+
+  const updated = await prisma.groupBuyingInvite.update({
+    where: { id: invite.id },
+    data: {
+      status: input.interested ? "INTERESTED" : "NOT_INTERESTED",
+      quantity: input.interested ? input.quantity : null,
+    },
+  });
+
+  if (input.interested && invite.request.status === "ACTIVE") {
+    await prisma.groupBuyingRequest.update({
+      where: { id: invite.requestId },
+      data: { status: "MATCHED" },
+    });
+  }
+
+  const origin = await prisma.business.findUnique({
+    where: { id: invite.request.businessId },
+    select: { ownerUserId: true, businessName: true },
+  });
+  const responder = await prisma.business.findUnique({
+    where: { id: businessId },
+    select: { businessName: true, ownerName: true },
+  });
+  if (origin) {
+    try {
+      await sendPushToUser(origin.ownerUserId, {
+        title: input.interested ? "Shop is interested" : "Shop declined",
+        body: input.interested
+          ? `${responder?.businessName ?? "A nearby shop"} wants ${updated.quantity} ${invite.request.unit} of ${invite.request.productId}`
+          : `${responder?.businessName ?? "A nearby shop"} is not interested in ${invite.request.productId}`,
+        data: {
+          type: "GROUP_BUYING_RESPONSE",
+          requestId: invite.requestId,
+          inviteId: invite.id,
+        },
+      });
+    } catch (error) {
+      logger.warn({ err: error }, "Could not send group-buying response push");
+    }
+  }
+
+  return {
+    id: updated.id,
+    status: updated.status,
+    quantity: updated.quantity,
+    requestId: updated.requestId,
+    shopName: responder?.businessName ?? "",
+    ownerName: responder?.ownerName ?? "",
+  };
 }
