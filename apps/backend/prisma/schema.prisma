@@ -268,6 +268,7 @@ model Supplier {
   updatedAt   DateTime @updatedAt
 
   transactions DebitTransaction[]
+  inventoryProducts InventoryProduct[]
 
   @@index([businessId])
   @@index([businessId, name])
@@ -777,9 +778,24 @@ model InventoryProduct {
 
   name         String
   category     String
+  subCategory  String?
+  brand        String?
+  sku          String?
+  barcode      String?
   unit         String
   currentStock Float    @default(0)
   minimumStock Float    @default(0)
+
+  purchasePrice Float?
+  sellingPrice  Float?
+  mrp           Float?
+  gstRate       Float?
+
+  supplierId   String?
+  supplier     Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  imageUri     String?
+  notes        String?
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -788,11 +804,17 @@ model InventoryProduct {
 
   @@index([businessId])
   @@index([businessId, name])
+  @@index([supplierId])
 }
 
 // One row per real stock change — currentStock on the product row above must
 // never be updated without a matching row here (mirrors the mobile app's own
-// hard rule in localInventoryApi.ts).
+// hard rule in localInventoryApi.ts). balanceAfter is the product's
+// currentStock immediately after this movement was applied — captured at
+// write time, since replaying it later would require every prior movement
+// to be immutable. Movements written before this column existed have no
+// balanceAfter (null), which is honest: their historical balance was never
+// recorded and must not be guessed.
 model InventoryMovement {
   id            String                @id @default(uuid())
   productId     String
@@ -803,6 +825,7 @@ model InventoryMovement {
   reason        String
   referenceType String?
   referenceId   String?
+  balanceAfter  Float?
 
   createdAt     DateTime              @default(now())
 

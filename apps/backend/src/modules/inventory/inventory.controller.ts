@@ -13,16 +13,38 @@ async function requireBusinessId(req: Request): Promise<string> {
 const createProductSchema = z.object({
   name: z.string().min(1).max(150),
   category: z.string().min(1).max(100),
+  subCategory: z.string().max(100).nullish(),
+  brand: z.string().max(100).nullish(),
+  sku: z.string().max(80).nullish(),
+  barcode: z.string().max(80).nullish(),
   unit: z.string().min(1).max(40),
   currentStock: z.number().nonnegative().default(0),
   minimumStock: z.number().nonnegative().default(0),
+  purchasePrice: z.number().nonnegative().nullish(),
+  sellingPrice: z.number().nonnegative().nullish(),
+  mrp: z.number().nonnegative().nullish(),
+  gstRate: z.number().min(0).max(100).nullish(),
+  supplierId: z.string().uuid().nullish(),
+  imageUri: z.string().max(500).nullish(),
+  notes: z.string().max(1000).nullish(),
 });
 
 const updateProductSchema = z.object({
   name: z.string().min(1).max(150).optional(),
   category: z.string().min(1).max(100).optional(),
+  subCategory: z.string().max(100).nullish(),
+  brand: z.string().max(100).nullish(),
+  sku: z.string().max(80).nullish(),
+  barcode: z.string().max(80).nullish(),
   unit: z.string().min(1).max(40).optional(),
   minimumStock: z.number().nonnegative().optional(),
+  purchasePrice: z.number().nonnegative().nullish(),
+  sellingPrice: z.number().nonnegative().nullish(),
+  mrp: z.number().nonnegative().nullish(),
+  gstRate: z.number().min(0).max(100).nullish(),
+  supplierId: z.string().uuid().nullish(),
+  imageUri: z.string().max(500).nullish(),
+  notes: z.string().max(1000).nullish(),
 });
 
 const stockChangeSchema = z.object({
