@@ -375,6 +375,17 @@ async function write(
       meta: { lastParty: party },
     };
   }
+  // "Kumar innum 1500 tharala" when the books already have Kumar pending: a new entry, or the same money? Flagged.
+  if (direction === "THEY_OWE" || direction === "I_OWE") {
+    const b = await tools.partyBalance(ctx.businessId, party, ctx.now);
+    if (b.pending > 0) {
+      warnings.push(say(lang, {
+        ta: `⚠️ Records-ல ஏற்கனவே ${party.name} ${party.kind === "CUSTOMER" ? "தரணும்" : "-க்கு கொடுக்கணும்"} ${rupees(b.pending)} இருக்கு — இது அதுக்கு மேல புது entry-யா? அதே பணம்-னா Confirm பண்ணாதீங்க.`,
+        tl: `⚠️ Records-la already ${party.name} ${party.kind === "CUSTOMER" ? "tharanum" : "-ku kudukanum"} ${rupees(b.pending)} irukku — idhu adhukku mela pudhu entry-a? Adhe panam-na Confirm pannaadheenga.`,
+        en: `⚠️ Your records already show ${rupees(b.pending)} pending with ${party.name} — is this a new amount on top of that? If it's the same money, don't confirm.`,
+      }));
+    }
+  }
   if (await tools.recentSameAmount(ctx.businessId, party, amount, "ENTRY", ctx.now)) {
     warnings.push(say(lang, {
       ta: `⚠️ ${party.name}-க்கு ${rupees(amount)} entry கொஞ்ச நேரம் முன்னாடி தான் save ஆச்சு — இது duplicate இல்லையா?`,

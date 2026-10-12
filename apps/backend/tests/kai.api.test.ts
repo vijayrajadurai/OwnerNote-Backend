@@ -224,6 +224,8 @@ describe("KAI API", () => {
       const credit = (await chatAs(tokenA, "Kumar enaku 500 rooba kudukanum").expect(200)).body.data;
       expect(credit.intent).toBe("ADD_CREDIT");
       expect(credit.draft.summary).toContain("₹500");
+      // Kumar already owes money: Kai asks whether this is new money on top, before anything is saved.
+      expect(credit.draft.warnings.some((w: string) => /already Kumar tharanum/.test(w))).toBe(true);
       const mic = (await chatAs(tokenA, "குமார் எனக்கு 500 ரூபா குடுக்கணும்").expect(200)).body.data;
       expect(mic.intent).toBe("ADD_CREDIT");
       const debit = (await chatAs(tokenA, "Naan Ravi Tradersku 900 rooba kudukanum").expect(200)).body.data;
