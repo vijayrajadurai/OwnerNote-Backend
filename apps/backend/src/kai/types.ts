@@ -15,6 +15,8 @@ export type KaiIntent =
   | "LOW_STOCK"
   | "CASH_FLOW"
   | "CALCULATE"
+  | "REPORT"
+  | "HOW_TO"
   | "ADD_CREDIT"
   | "ADD_DEBIT"
   | "RECORD_PAYMENT"
@@ -47,6 +49,30 @@ export const READ_ONLY_INTENTS: readonly KaiIntent[] = [
 
 export type PartyKind = "CUSTOMER" | "SUPPLIER";
 
+/** What a report question is about ("customer pending amount", "cash received", "stock details"…). */
+export type ReportTopic =
+  | "RECEIVABLE"
+  | "PAYABLE"
+  | "PENDING"
+  | "COLLECTIONS"
+  | "PAYMENTS_MADE"
+  | "SALES"
+  | "PURCHASES"
+  | "EXPENSES"
+  | "PROFIT"
+  | "LOSS"
+  | "CASH"
+  | "STOCK"
+  | "HISTORY"
+  | "CUSTOMERS"
+  | "SUPPLIERS"
+  | "SUMMARY";
+
+export type ReportPeriod = "TODAY" | "YESTERDAY" | "THIS_WEEK" | "LAST_WEEK" | "LAST_7_DAYS" | "THIS_MONTH" | "LAST_MONTH" | "ALL";
+
+/** A write Kai doesn't do from chat (or a feature Owner Note doesn't have): said plainly, with where to do it. */
+export type HowTo = "SALE" | "EXPENSE" | "PURCHASE" | "CUSTOMER" | "SUPPLIER" | "STOCK" | "EDIT" | "DELETE" | "UNSUPPORTED";
+
 /** A customer or supplier of this business, as the matcher sees it (id + name only; never balances). */
 export interface PartyRef {
   id: string;
@@ -64,7 +90,8 @@ export interface ProductRef {
 export type PartyMatch =
   | { status: "FOUND"; party: PartyRef; said: string }
   | { status: "AMBIGUOUS"; options: PartyRef[]; said: string }
-  | { status: "UNKNOWN"; said: string }
+  /** guessed: a lower-case word read as a name only from where it stands ("suresh 500 kuduthaan"). */
+  | { status: "UNKNOWN"; said: string; guessed?: boolean }
   | { status: "NONE" };
 
 export type ProductMatch =
@@ -73,8 +100,11 @@ export type ProductMatch =
   | { status: "NONE"; said?: string };
 
 /** Which way money moved, as the owner said it. */
-/** "Vaanginen" is "I took": money from a customer, goods from a supplier. */
-export type MoneyDirection = "THEY_GAVE" | "I_GAVE" | "I_TOOK" | "I_BOUGHT" | "CREDIT_WORD";
+/**
+ * "Vaanginen" is "I took": money from a customer, goods from a supplier. "Kumar enakku 500 tharanum" is THEY_OWE (a credit
+ * entry); "naan Kumar-ku 500 tharanum" is I_OWE (a purchase entry with a supplier).
+ */
+export type MoneyDirection = "THEY_GAVE" | "I_GAVE" | "I_TOOK" | "I_BOUGHT" | "CREDIT_WORD" | "THEY_OWE" | "I_OWE";
 
 export interface PendingChoice {
   intent: KaiIntent;
@@ -121,6 +151,8 @@ export interface Understanding {
   choiceIndex?: number;
   /** "Illa, 3000 thaan": the number the owner says is right. */
   claimedAmount?: number;
+  report?: { topic: ReportTopic; period: ReportPeriod };
+  howTo?: HowTo;
 }
 
 export interface KaiEngineInfo {

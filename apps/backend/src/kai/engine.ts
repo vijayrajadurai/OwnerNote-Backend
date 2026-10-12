@@ -165,6 +165,60 @@ function calculate(ctx: Ctx): Outcome {
   return { intent: "CALCULATE", text: `${expression} = ${value.toLocaleString("en-IN")}`, facts: [{ label: "result", value, source: "calculator" }], topic: "calculation" };
 }
 
+async function report(ctx: Ctx): Promise<Outcome> {
+  const { lang } = ctx;
+  const { topic, period } = ctx.u.report!;
+  const { from, to } = tools.periodRange(period, ctx.now);
+  const money = (label: string, value: number, source: string): KaiFact => ({ label, value, unit: "INR", source });
+  const out = (text: string, facts: KaiFact[] = [], phrase = true): Outcome => ({ intent: "REPORT", text, facts, phrase, topic: topic.toLowerCase() });
+  switch (topic) {
+    case "COLLECTIONS": {
+      const f = await tools.flows(ctx.businessId, from, to);
+      return out(replies.collectionsReply(lang, period, f), [money("collected", f.collected, "payment")]);
+    }
+    case "PAYMENTS_MADE": {
+      const f = await tools.flows(ctx.businessId, from, to);
+      return out(replies.paymentsMadeReply(lang, period, f), [money("paid to suppliers", f.paidOut, "payment")]);
+    }
+    case "PURCHASES": {
+      const f = await tools.flows(ctx.businessId, from, to);
+      return out(replies.purchasesReply(lang, period, f), [money("purchases", f.purchases, "debitTransaction")]);
+    }
+    case "SALES": {
+      const [f, cash] = await Promise.all([tools.flows(ctx.businessId, from, to), tools.dailyCash(ctx.businessId, from, to)]);
+      return out(replies.salesReply(lang, period, f, cash), [money("credit sales", f.creditGiven, "creditTransaction"), money("daily cash in", cash.totalIn, "dailyCashReport")]);
+    }
+    case "EXPENSES": {
+      const cash = await tools.dailyCash(ctx.businessId, from, to);
+      return out(replies.expensesReply(lang, period, cash), [money("daily cash out", cash.totalOut, "dailyCashReport")]);
+    }
+    case "PROFIT":
+    case "LOSS": {
+      const [f, cash] = await Promise.all([tools.flows(ctx.businessId, from, to), tools.dailyCash(ctx.businessId, from, to)]);
+      return out(replies.profitReply(lang, period, topic === "LOSS", f, cash), [], false);
+    }
+    case "CASH": {
+      const cash = await tools.dailyCash(ctx.businessId, from, to);
+      return out(replies.cashReply(lang, cash.latest), cash.latest ? [money("closing balance", cash.latest.closing, "dailyCashReport")] : []);
+    }
+    case "STOCK":
+      return out(replies.stockSummaryReply(lang, await tools.stockSummary(ctx.businessId)), [], false);
+    case "HISTORY":
+      return out(replies.historyReply(lang, period, await tools.history(ctx.businessId, from, to)), [], false);
+    case "CUSTOMERS":
+    case "SUPPLIERS":
+      return out(replies.partiesReply(lang, topic === "SUPPLIERS", await tools.partyCounts(ctx.businessId)), [], false);
+    case "PENDING": {
+      const t = await tools.totals(ctx.businessId);
+      return out(replies.pendingReply(lang, t), [money("total receivable", t.receivable, "creditTransaction"), money("total payable", t.payable, "debitTransaction")]);
+    }
+    default: {
+      const [f, t] = await Promise.all([tools.flows(ctx.businessId, from, to), tools.totals(ctx.businessId)]);
+      return out(replies.summaryReply(lang, period, f, t), [money("collected", f.collected, "payment"), money("credit given", f.creditGiven, "creditTransaction")]);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Writes (drafts only — nothing is written before Confirm)
 
@@ -255,6 +309,17 @@ async function write(
   }
 
   const warnings: string[] = [];
+  // "Naan Kannan-ku 300 kuduthen" with no Kannan in the books: a credit to a new customer, or paying someone? Asked.
+  if (match.status === "UNKNOWN" && direction === "I_GAVE") {
+    return {
+      intent,
+      text: say(lang, {
+        ta: `${match.said}-க்கு ${rupees(amount)}: கடன் கொடுத்தீங்களா (புது கஸ்டமர்), இல்ல சப்ளையருக்கு payment-ஆ? "${match.said}-க்கு ${amount} கடன்" இல்ல "${match.said} கிட்ட ${amount}-க்கு சாமான் வாங்கினேன்"-னு சொல்லுங்க.`,
+        tl: `${match.said}-ku ${rupees(amount)}: credit kudutheengala (pudhu customer), illa supplier-ku payment-a? "${match.said}-ku ${amount} credit" illa "${match.said} kitta ${amount} ku saamaan vaanginen"-nu sollunga.`,
+        en: `${match.said} — ${rupees(amount)}: did you give credit (a new customer), or pay a supplier? Say "Add ${amount} credit to ${match.said}" or "Bought goods for ${amount} from ${match.said}".`,
+      }),
+    };
+  }
   if (match.status === "UNKNOWN") {
     const kind = intent === "ADD_DEBIT" ? "ADD_DEBIT" : "ADD_CREDIT";
     return proposeDraft(ctx, kind, { newPartyName: match.said, partyName: match.said, amount }, warnings, intent);
@@ -516,6 +581,10 @@ async function route(ctx: Ctx): Promise<Outcome> {
     }
     case "STOCK":
       return stock(ctx);
+    case "REPORT":
+      return report(ctx);
+    case "HOW_TO":
+      return { intent: u.intent, text: replies.howToReply(lang, u.howTo ?? "UNSUPPORTED"), topic: "how to" };
     case "LOW_STOCK": {
       const list = await tools.lowStock(ctx.businessId);
       return { intent: u.intent, text: replies.lowStockReply(lang, list), facts: list.slice(0, 8).map((s) => ({ label: `${s.name} stock`, value: s.currentStock, unit: s.unit, source: "inventoryProduct" })), topic: "low stock" };

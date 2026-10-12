@@ -1,7 +1,7 @@
 import { prisma } from "../db/prisma";
 import { toNumber } from "../utils/decimal";
 import { getCashFlowSummary } from "../ai/cashFlowAnalyzer";
-import type { PartyRef, ProductRef } from "./types";
+import type { PartyRef, ProductRef, ReportPeriod } from "./types";
 
 /**
  * Kai's read-only business tools. Every query is scoped by the caller's businessId (tenant isolation) and every
@@ -235,4 +235,146 @@ export async function recentSameAmount(
 
 export function round2(v: number): number {
   return Math.round(v * 100) / 100;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Reports for a period ("kadantha maasa vasool", "this week's purchase details")
+
+
+/** [from, to) in UTC for a period of the owner's calendar (India time; weeks start on Monday). Null from: all time. */
+export function periodRange(period: ReportPeriod, now: Date): { from: Date | null; to: Date } {
+  const today = startOfIstDay(now);
+  const tomorrow = new Date(today.getTime() + DAY_MS);
+  const local = new Date(today.getTime() + IST_OFFSET_MS); // midnight IST, read with UTC getters
+  const weekday = (local.getUTCDay() + 6) % 7; // Monday = 0
+  const monthStart = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - IST_OFFSET_MS);
+  const lastMonthStart = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth() - 1, 1) - IST_OFFSET_MS);
+  const weekStart = new Date(today.getTime() - weekday * DAY_MS);
+  switch (period) {
+    case "TODAY":
+      return { from: today, to: tomorrow };
+    case "YESTERDAY":
+      return { from: new Date(today.getTime() - DAY_MS), to: today };
+    case "THIS_WEEK":
+      return { from: weekStart, to: tomorrow };
+    case "LAST_WEEK":
+      return { from: new Date(weekStart.getTime() - 7 * DAY_MS), to: weekStart };
+    case "LAST_7_DAYS":
+      return { from: new Date(tomorrow.getTime() - 7 * DAY_MS), to: tomorrow };
+    case "THIS_MONTH":
+      return { from: monthStart, to: tomorrow };
+    case "LAST_MONTH":
+      return { from: lastMonthStart, to: monthStart };
+    case "ALL":
+      return { from: null, to: tomorrow };
+  }
+}
+
+export interface Flows {
+  creditGiven: number;
+  creditEntries: number;
+  collected: number;
+  collections: number;
+  purchases: number;
+  purchaseEntries: number;
+  paidOut: number;
+  paymentsOut: number;
+  topPayers: { name: string; amount: number }[];
+}
+
+/** Money that moved in [from, to): credit given, collected, purchases, paid to suppliers. */
+export async function flows(businessId: string, from: Date | null, to: Date): Promise<Flows> {
+  const range = { ...(from ? { gte: from } : {}), lt: to };
+  const inRange = { OR: [{ transactionDate: range }, { transactionDate: null, createdAt: range }] };
+  const [credits, debits, inPayments, outPayments] = await Promise.all([
+    prisma.creditTransaction.findMany({ where: { businessId, ...inRange }, select: { amount: true } }),
+    prisma.debitTransaction.findMany({ where: { businessId, ...inRange }, select: { amount: true } }),
+    prisma.payment.findMany({
+      where: { createdAt: range, creditTransaction: { businessId } },
+      select: { amount: true, creditTransaction: { select: { customer: { select: { id: true, name: true } } } } },
+    }),
+    prisma.payment.findMany({ where: { createdAt: range, debitTransaction: { businessId } }, select: { amount: true } }),
+  ]);
+  const sum = (rows: { amount: Parameters<typeof toNumber>[0] }[]) => round2(rows.reduce((s, r) => s + toNumber(r.amount), 0));
+  const payers = new Map<string, { name: string; amount: number }>();
+  for (const p of inPayments) {
+    const c = p.creditTransaction?.customer;
+    if (!c) continue;
+    const e = payers.get(c.id) ?? { name: c.name, amount: 0 };
+    e.amount = round2(e.amount + toNumber(p.amount));
+    payers.set(c.id, e);
+  }
+  return {
+    creditGiven: sum(credits),
+    creditEntries: credits.length,
+    collected: sum(inPayments),
+    collections: inPayments.length,
+    purchases: sum(debits),
+    purchaseEntries: debits.length,
+    paidOut: sum(outPayments),
+    paymentsOut: outPayments.length,
+    topPayers: [...payers.values()].sort((a, b) => b.amount - a.amount).slice(0, 3),
+  };
+}
+
+/** The shop's own Daily Cash reports (the cash box): in / out over a period, and the latest closing balance. */
+export async function dailyCash(businessId: string, from: Date | null, to: Date) {
+  const day = (d: Date) => new Date(d.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+  const where = { businessId, date: { ...(from ? { gte: day(from) } : {}), lt: day(to) } };
+  const [reports, latest] = await Promise.all([
+    prisma.dailyCashReport.findMany({ where, select: { totalIn: true, totalOut: true } }),
+    prisma.dailyCashReport.findFirst({ where: { businessId }, orderBy: { date: "desc" }, select: { date: true, openingBalance: true, net: true, cashIn: true, cashOut: true } }),
+  ]);
+  return {
+    reports: reports.length,
+    totalIn: round2(reports.reduce((s, r) => s + toNumber(r.totalIn), 0)),
+    totalOut: round2(reports.reduce((s, r) => s + toNumber(r.totalOut), 0)),
+    latest: latest
+      ? { date: latest.date, closing: round2(toNumber(latest.openingBalance) + toNumber(latest.net)), cashIn: toNumber(latest.cashIn), cashOut: toNumber(latest.cashOut) }
+      : null,
+  };
+}
+
+export interface HistoryLine {
+  at: Date;
+  name: string;
+  kind: "CREDIT" | "PURCHASE" | "PAYMENT_IN" | "PAYMENT_OUT";
+  amount: number;
+}
+
+/** The latest entries and payments in a period, newest first. */
+export async function history(businessId: string, from: Date | null, to: Date, limit = 8): Promise<HistoryLine[]> {
+  const range = { ...(from ? { gte: from } : {}), lt: to };
+  const [credits, debits, payIn, payOut] = await Promise.all([
+    prisma.creditTransaction.findMany({ where: { businessId, createdAt: range }, orderBy: { createdAt: "desc" }, take: limit, select: { amount: true, createdAt: true, transactionDate: true, customer: { select: { name: true } } } }),
+    prisma.debitTransaction.findMany({ where: { businessId, createdAt: range }, orderBy: { createdAt: "desc" }, take: limit, select: { amount: true, createdAt: true, transactionDate: true, supplier: { select: { name: true } } } }),
+    prisma.payment.findMany({ where: { createdAt: range, creditTransaction: { businessId } }, orderBy: { createdAt: "desc" }, take: limit, select: { amount: true, createdAt: true, creditTransaction: { select: { customer: { select: { name: true } } } } } }),
+    prisma.payment.findMany({ where: { createdAt: range, debitTransaction: { businessId } }, orderBy: { createdAt: "desc" }, take: limit, select: { amount: true, createdAt: true, debitTransaction: { select: { supplier: { select: { name: true } } } } } }),
+  ]);
+  const lines: HistoryLine[] = [
+    ...credits.map((c) => ({ at: c.transactionDate ?? c.createdAt, name: c.customer.name, kind: "CREDIT" as const, amount: toNumber(c.amount) })),
+    ...debits.map((d) => ({ at: d.transactionDate ?? d.createdAt, name: d.supplier.name, kind: "PURCHASE" as const, amount: toNumber(d.amount) })),
+    ...payIn.map((p) => ({ at: p.createdAt, name: p.creditTransaction?.customer.name ?? "", kind: "PAYMENT_IN" as const, amount: toNumber(p.amount) })),
+    ...payOut.map((p) => ({ at: p.createdAt, name: p.debitTransaction?.supplier.name ?? "", kind: "PAYMENT_OUT" as const, amount: toNumber(p.amount) })),
+  ];
+  return lines.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, limit);
+}
+
+export async function partyCounts(businessId: string) {
+  const [customers, suppliers, t] = await Promise.all([
+    prisma.customer.count({ where: { businessId } }),
+    prisma.supplier.count({ where: { businessId } }),
+    totals(businessId),
+  ]);
+  return { customers, suppliers, totals: t };
+}
+
+export async function stockSummary(businessId: string) {
+  const rows = await prisma.inventoryProduct.findMany({
+    where: { businessId },
+    select: { name: true, unit: true, currentStock: true, minimumStock: true },
+    orderBy: { name: "asc" },
+  });
+  const low = rows.filter((r) => r.currentStock <= r.minimumStock);
+  return { products: rows.length, low: low.length, out: rows.filter((r) => r.currentStock <= 0).length, lowest: low.slice(0, 3) };
 }

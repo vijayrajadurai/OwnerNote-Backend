@@ -15,7 +15,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "seed:admin": "node ../../node_modules/tsx/dist/cli.mjs scripts/seedAdmin.ts",
-    "kai:eval": "node ../../node_modules/tsx/dist/cli.mjs scripts/kaiEval.ts"
+    "kai:eval": "node ../../node_modules/tsx/dist/cli.mjs scripts/kaiEval.ts",
+    "kai:dataset": "node ../../node_modules/tsx/dist/cli.mjs scripts/kaiDataset.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
