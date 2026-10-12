@@ -218,6 +218,8 @@ Full template: `apps/backend/.env.production.example`
 | `CORS_ORIGIN` | `https://admin.yourdomain.com` | Not `*` |
 | `TRUST_PROXY` | `1` | Behind Render load balancer |
 | `TEST_LOGIN_ENABLED` | `false` | Required in production |
+| `KAI_MODEL_PROVIDER` | `none` | KAI rule-based engine; `ollama` / `openai-compatible` only for **your own** model server |
+| `KAI_HISTORY_RETENTION_DAYS` | `180` | Kai chat history is deleted after this |
 
 ---
 
@@ -248,6 +250,13 @@ More setup than Render, but better ping from Tamil Nadu / South India.
 ---
 
 ## Operations
+
+### KAI (business assistant)
+
+KAI runs inside the API at `/kai` (see `apps/backend/src/kai/README.md`). With `KAI_MODEL_PROVIDER=none` it is the
+labelled rule-based engine and needs nothing else. To add a local open-weight model later, run Ollama / vLLM /
+llama.cpp on a server you control and set `KAI_MODEL_PROVIDER`, `KAI_MODEL_URL`, `KAI_MODEL_NAME`. Paid proprietary
+LLM APIs are refused at boot. The `kai_assistant` migration must be applied (`npx prisma migrate deploy`).
 
 ### Run migrations after a schema change
 
