@@ -113,6 +113,25 @@ export function cashEntryOf(n: string): "SALE" | "EXPENSE" | "PURCHASE" | undefi
   return undefined;
 }
 
+/**
+ * Whose money a list question is about (owner, 12 Oct 2026: "naan yaaruku tharanum" listed who owes the owner):
+ * the owner pays ("naan", "yaaruku", "who do I owe") → PAYS; the owner gets ("enakku", "yaaru kudukanum", "owes me") →
+ * GETS; the verb alone ("tharanum", "evlo kudukkanum") → ASK.
+ */
+const OWE_VERB = /\b(?:tharanum|tharanam|kudukanum|kudukkanum|kodukkanum|kodukanum|pay|payment|pannanum|settle|owe)\b/;
+const OWNER_GETS = /\b(?:enaku|enakku|ennaku|yenaku)\b|owes?\s+me|pay\s+me|kitta\s+irundhu|\b(?:varanum|vaanganum|vanganum|vasool|collect)\b/;
+const OWNER_PAYS = /\b(?:naan|nan|yaaruku|yaarukku|yarukku|yaruku|whom)\b|to\s+whom|\bi\s+owe\b|should\s+i\s+pay|do\s+i\s+(?:pay|owe)|who\s+do\s+i/;
+const WHO_GIVES = /\b(?:yaar|yaaru|yar|yaru|who)\b/;
+const BARE_WORDS = new Set(["evlo", "evvalavu", "evalo", "baaki", "bakki", "innum", "tharanum", "tharanam", "kudukanum", "kudukkanum", "kodukkanum", "kodukanum", "pay", "pannanum", "payment"]);
+
+export function sideOf(n: string): "PAYS" | "GETS" | "ASK" | undefined {
+  if (!OWE_VERB.test(n)) return undefined;
+  if (OWNER_PAYS.test(n) && !OWNER_GETS.test(n)) return "PAYS";
+  if (OWNER_GETS.test(n) || WHO_GIVES.test(n)) return "GETS";
+  const words = n.replace(/[?!.,]/g, " ").trim().split(/\s+/);
+  return words.length <= 3 && words.every((w) => BARE_WORDS.has(w)) ? "ASK" : undefined;
+}
+
 function directionOf(n: string): MoneyDirection | undefined {
   // "Kumar 3000 thaane tharanum?" checks the books; it is not a new entry.
   const statement = /\d/.test(n) && !n.endsWith("?") && !/\b(?:thaane|thane|correct-?a|illaiya|ah|aa)\b/.test(n);
@@ -243,6 +262,22 @@ export function understand(input: UnderstandInput): Understanding {
   // Owner Note doesn't have (invoice, Excel export…): said plainly with where to do it — never a wrong answer.
   const how = howTo(n);
   if (how && !(how !== "UNSUPPORTED" && amounts.length > 0 && party.status !== "NONE")) return is("HOW_TO", { howTo: how });
+
+  // Kai asked "money to come in, or money you pay?": "naan" / "suppliers" / "enakku" / "customers" answers it.
+  if (turn.sideAsked && n.split(" ").length <= 4) {
+    if (/\b(?:naan|nan|neenga|supplier|suppliers|kudukanum|kudukkanum|payable)\b/.test(n) && !OWNER_GETS.test(n)) return is("TOTAL_PAYABLE");
+    if (/\b(?:enakku|enaku|customer|customers|varanum|receivable)\b/.test(n)) return is("TOTAL_RECEIVABLE");
+  }
+  // Whose money: the owner pays, the owner gets, or the verb alone — asked, never guessed (with someone just talked about: theirs).
+  const namedTopic = reportTopic(n);
+  if (party.status === "NONE" && amounts.length === 0 && !/kitta\s+vaanganum|collect\s+from|overdue/.test(n) &&
+      (!namedTopic || ["SUPPLIERS", "CUSTOMERS", "PENDING"].includes(namedTopic))) {
+    const side = sideOf(n);
+    if (side === "ASK" && turn.lastParty) return is("PARTY_BALANCE", { party: { status: "FOUND", party: turn.lastParty, said: "" } });
+    if (side === "PAYS") return is("TOTAL_PAYABLE");
+    if (side === "GETS" && !pronounParty) return is("TOTAL_RECEIVABLE");
+    if (side === "ASK") return is("WHICH_SIDE");
+  }
 
   if (OVERDUE.test(n) && party.status === "NONE") return is("OVERDUE");
   if (LOW_STOCK.test(n)) return is("LOW_STOCK", { product });

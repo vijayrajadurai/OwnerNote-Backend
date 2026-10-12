@@ -133,6 +133,21 @@ describe("KAI API", () => {
       expect((await chatAs(tokenA, "1200 la 18% gst").expect(200)).body.data.reply).toBe("₹1,200 + 18% (₹216) = ₹1,416");
     });
 
+    it("'naan yaaruku tharanum' is what the owner owes; the verb alone is asked about, and the answer picks the side", async () => {
+      expect((await chatAs(tokenA, "naan yaaruku tharanum").expect(200)).body.data.reply).toContain("₹8,500");
+      expect((await chatAs(tokenA, "நான் யாருக்கு தரணும்").expect(200)).body.data.intent).toBe("TOTAL_PAYABLE");
+      expect((await chatAs(tokenA, "enaku yaaru tharanum").expect(200)).body.data.reply).toContain("₹8,200");
+      const ask = (await chatAs(tokenA, "tharanum").expect(200)).body.data;
+      expect(ask.intent).toBe("WHICH_SIDE");
+      expect(ask.reply).toMatch(/vara vendiyadha/);
+      const pays = (await chatAs(tokenA, "naan", ask.conversationId).expect(200)).body.data;
+      expect(pays.intent).toBe("TOTAL_PAYABLE");
+      expect(pays.reply).toContain("₹8,500");
+      const ask2 = (await chatAs(tokenA, "evlo kudukkanum").expect(200)).body.data;
+      const gets = (await chatAs(tokenA, "customers", ask2.conversationId).expect(200)).body.data;
+      expect(gets.intent).toBe("TOTAL_RECEIVABLE");
+    });
+
     it("never invents: an unknown name is said back, with no number", async () => {
       const d = (await chatAs(tokenA, "Suresh evlo tharanum").expect(200)).body.data;
       expect(d.reply).toContain("Suresh");
