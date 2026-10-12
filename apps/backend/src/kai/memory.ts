@@ -68,6 +68,7 @@ export interface TurnMeta {
   lastProduct?: ProductRef;
   choice?: PendingChoice;
   awaitingAmount?: { intent: KaiIntent; party: PartyRef | { newName: string; kind: PartyRef["kind"] } };
+  sideAsked?: boolean;
   facts?: KaiFact[];
   draftId?: string;
 }
@@ -97,6 +98,7 @@ export async function loadTurnContext(
     turn.lastLang = latest.lang as KaiLang;
     turn.lastAnswer = { messageId: latest.id, text: latest.text, intent: turn.lastIntent ?? "UNCLEAR", facts: latestMeta.facts ?? [] };
     turn.choice = latestMeta.choice;
+    turn.sideAsked = latestMeta.sideAsked === true;
   }
   const draft = await prisma.kaiActionDraft.findFirst({
     where: { conversationId, businessId, status: "PENDING", expiresAt: { gt: now } },

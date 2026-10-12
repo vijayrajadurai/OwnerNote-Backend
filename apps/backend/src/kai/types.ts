@@ -17,6 +17,7 @@ export type KaiIntent =
   | "CALCULATE"
   | "REPORT"
   | "HOW_TO"
+  | "WHICH_SIDE"
   | "ADD_CREDIT"
   | "ADD_DEBIT"
   | "RECORD_PAYMENT"
@@ -123,6 +124,8 @@ export interface KaiTurnContext {
   /** The previous assistant reply and the facts it was built from (for "that's wrong"). */
   lastAnswer?: { messageId: string; text: string; intent: KaiIntent; facts: KaiFact[] };
   pendingDraft?: { id: string; kind: string; amount?: number };
+  /** Kai just asked "money to come in, or money you pay?". */
+  sideAsked?: boolean;
   choice?: PendingChoice;
 }
 

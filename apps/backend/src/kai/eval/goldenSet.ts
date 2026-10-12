@@ -102,6 +102,16 @@ export const GOLDEN_SET: EvalCase[] = [
   { text: "Cash balance kaatu", intent: "REPORT" },
   { text: "Moththa baaki evlo iruku?", intent: "REPORT" },
   { text: "Indha maasam laabam evlo?", intent: "REPORT" },
+  // Whose money (owner, 12 Oct 2026: "naan yaaruku tharanum" listed who owes the owner)
+  { text: "naan yaaruku tharanum", intent: "TOTAL_PAYABLE" },
+  { text: "நான் யாருக்கு தரணும்", intent: "TOTAL_PAYABLE" },
+  { text: "yaaruku payment pannanum", intent: "TOTAL_PAYABLE" },
+  { text: "whom should i pay", intent: "TOTAL_PAYABLE" },
+  { text: "enaku yaaru tharanum", intent: "TOTAL_RECEIVABLE" },
+  { text: "yaaru kudukanum", intent: "TOTAL_RECEIVABLE" },
+  { text: "tharanum", intent: "WHICH_SIDE" },
+  { text: "evlo kudukkanum", intent: "WHICH_SIDE" },
+  { text: "evlo tharanum", intent: "PARTY_BALANCE", party: "Ramesh", lastParty: "Ramesh" },
   // Arithmetic (code, never a model)
   { text: "500 + 300 evlo", intent: "CALCULATE" },
   { text: "1200 la 18% gst", intent: "CALCULATE" },

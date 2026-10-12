@@ -594,6 +594,16 @@ async function route(ctx: Ctx): Promise<Outcome> {
       return stock(ctx);
     case "REPORT":
       return report(ctx);
+    case "WHICH_SIDE":
+      return {
+        intent: u.intent,
+        meta: { sideAsked: true },
+        text: say(lang, {
+          ta: "ஓனர், உங்களுக்கு வர வேண்டியதா (கஸ்டமர்கள் தரணும்), இல்ல நீங்க கொடுக்க வேண்டியதா (சப்ளையர்களுக்கு)? \"எனக்கு யாரு தரணும்\" இல்ல \"நான் யாருக்கு தரணும்\"-னு சொல்லுங்க.",
+          tl: "Owner, ungalukku vara vendiyadha (customers tharanum), illa neenga kudukka vendiyadha (suppliers-ku)? \"Enakku yaaru tharanum\" illa \"naan yaarukku tharanum\"-nu sollunga.",
+          en: "Owner, money to come in (customers owe you), or money you pay (suppliers)? Say \"who owes me\" or \"who do I owe\".",
+        }),
+      };
     case "HOW_TO":
       return { intent: u.intent, text: replies.howToReply(lang, u.howTo ?? "UNSUPPORTED"), topic: "how to" };
     case "LOW_STOCK": {
@@ -715,6 +725,7 @@ export async function chat(input: ChatInput): Promise<KaiReply> {
     lastProduct: out.meta?.lastProduct ?? turn.lastProduct,
     choice: out.meta?.choice,
     awaitingAmount: out.meta?.awaitingAmount,
+    sideAsked: out.meta?.sideAsked,
     facts: out.facts ?? [],
     draftId: out.draft?.id,
   };
