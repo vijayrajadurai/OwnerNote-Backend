@@ -113,6 +113,11 @@ model Business {
   groupBuyingInvites  GroupBuyingInvite[]
   inventoryProducts   InventoryProduct[]
   localOffers         LocalOffer[]
+  kaiConversations    KaiConversation[]
+  kaiMemories         KaiMemory[]
+  kaiCorrections      KaiCorrection[]
+  kaiActionDrafts     KaiActionDraft[]
+  kaiFeedback         KaiFeedback[]
 
   @@index([category])
   @@index([city])
@@ -879,4 +884,173 @@ model LocalOffer {
   @@index([businessId])
   @@index([status, expiresAt])
   @@index([category, status])
+}
+
+// ---------------------------------------------------------------------------
+// KAI — the business assistant (src/kai). Everything here is tenant-scoped by
+// businessId. Facts are never stored here: balances and stock are always read
+// from the books (CreditTransaction / DebitTransaction / InventoryProduct).
+// ---------------------------------------------------------------------------
+
+enum KaiMessageRole {
+  USER
+  ASSISTANT
+}
+
+enum KaiMemoryKind {
+  PREFERENCE
+  ALIAS
+  NOTE
+}
+
+enum KaiMemoryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum KaiCorrectionStatus {
+  UNVERIFIED
+  MATCHES_RECORDS
+  CONFLICTS_WITH_RECORDS
+}
+
+enum KaiActionKind {
+  ADD_CREDIT
+  ADD_DEBIT
+  RECORD_PAYMENT
+  SAVE_MEMORY
+}
+
+enum KaiActionStatus {
+  PENDING
+  EXECUTED
+  CANCELLED
+  FAILED
+}
+
+model KaiConversation {
+  id            String   @id @default(uuid())
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId        String
+
+  // Rolling, rule-built summary of what was talked about (people, products, topics).
+  summary       String?
+  lastMessageAt DateTime @default(now())
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  messages      KaiMessage[]
+
+  @@index([businessId, lastMessageAt])
+}
+
+model KaiMessage {
+  id             String          @id @default(uuid())
+  conversationId String
+  conversation   KaiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  businessId     String
+
+  role           KaiMessageRole
+  text           String
+  lang           String
+  intent         String?
+  // "rule-based" or "model:<provider>/<name>" — what produced this reply.
+  engine         String?
+  // Context for the next turn (the person talked about, a pending choice) and the facts the reply was built from.
+  meta           Json?
+
+  createdAt      DateTime        @default(now())
+
+  feedback       KaiFeedback[]
+
+  @@index([conversationId, createdAt])
+  @@index([businessId, createdAt])
+}
+
+// Owner-approved preferences, name aliases and notes. PENDING until the owner confirms.
+model KaiMemory {
+  id         String          @id @default(uuid())
+  businessId String
+  business   Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId     String
+
+  kind       KaiMemoryKind
+  key        String
+  value      String
+  status     KaiMemoryStatus @default(PENDING)
+  // Where it came from, e.g. "chat:<messageId>".
+  source     String
+  approvedAt DateTime?
+
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([businessId, status, kind])
+}
+
+// "That's wrong" from the owner: kept with its source, time and how it compares with the records.
+model KaiCorrection {
+  id          String              @id @default(uuid())
+  businessId  String
+  business    Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId      String
+
+  messageId   String?
+  said        String
+  previous    String?
+  source      String
+  status      KaiCorrectionStatus @default(UNVERIFIED)
+  verifiedAt  DateTime?
+
+  createdAt   DateTime            @default(now())
+
+  @@index([businessId, createdAt])
+}
+
+// A write Kai proposed. Nothing is written until the owner confirms it; confirming runs in one DB transaction.
+model KaiActionDraft {
+  id               String          @id @default(uuid())
+  businessId       String
+  business         Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId           String
+  conversationId   String?
+
+  kind             KaiActionKind
+  payload          Json
+  summary          String
+  warnings         Json?
+  status           KaiActionStatus @default(PENDING)
+  // Optional client Idempotency-Key sent with the confirm call.
+  confirmKey       String?         @unique
+  result           Json?
+  error            String?
+
+  expiresAt        DateTime
+  executedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([businessId, status])
+}
+
+model KaiFeedback {
+  id            String     @id @default(uuid())
+  businessId    String
+  business      Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId        String
+  messageId     String
+  message       KaiMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  rating        Int
+  comment       String?
+  // The owner's explicit opt-in for this exchange to be used (redacted) in a future training / evaluation set.
+  allowTraining Boolean    @default(false)
+
+  createdAt     DateTime   @default(now())
+
+  @@unique([messageId, userId])
+  @@index([businessId, createdAt])
 }

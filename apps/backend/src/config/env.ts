@@ -22,6 +22,36 @@ const PRODUCTION_MIN_JWT_SECRET_LENGTH = 32;
 // too, without being so strict that a real random secret could ever trip it.
 const PRODUCTION_MIN_JWT_SECRET_CHAR_VARIETY = 8;
 
+// KAI must never call a paid proprietary LLM API (owner's rule): a model URL on one of these hosts refuses to boot.
+// The model is a local / self-hosted open-weight model (Ollama in development, a self-hosted server in production).
+const KAI_PROPRIETARY_MODEL_HOSTS = [
+  "openai.com",
+  "openai.azure.com",
+  "anthropic.com",
+  "generativelanguage.googleapis.com",
+  "aiplatform.googleapis.com",
+  "cohere.ai",
+  "cohere.com",
+  "mistral.ai",
+  "groq.com",
+  "together.xyz",
+  "together.ai",
+  "perplexity.ai",
+  "fireworks.ai",
+  "deepseek.com",
+  "x.ai",
+];
+
+export function isProprietaryModelHost(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return KAI_PROPRIETARY_MODEL_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+}
+
 export function hasFirebaseAdminCredentials(data: {
   FIREBASE_SERVICE_ACCOUNT_JSON?: string;
   FIREBASE_PROJECT_ID?: string;
@@ -73,6 +103,17 @@ const envSchema = z
       .transform((value) => value.trim().toLowerCase() === "true"),
     TEST_LOGIN_USERNAME: z.string().optional(),
     TEST_LOGIN_PASSWORD: z.string().optional(),
+    // KAI (src/kai). "none" = the labelled rule-based engine only (no AI model); "ollama" / "openai-compatible" =
+    // a local or self-hosted open-weight model (Ollama, vLLM, llama.cpp server). Never a paid proprietary API.
+    KAI_MODEL_PROVIDER: z.enum(["none", "ollama", "openai-compatible"]).default("none"),
+    KAI_MODEL_URL: z.string().optional(),
+    KAI_MODEL_NAME: z.string().optional(),
+    // Only for a self-hosted gateway that wants one; never sent to the client.
+    KAI_MODEL_API_KEY: z.string().optional(),
+    KAI_MODEL_TIMEOUT_MS: z.coerce.number().int().min(500).max(120000).default(8000),
+    KAI_HISTORY_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(180),
+    KAI_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).max(600).default(30),
+    KAI_DRAFT_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
     // Express's own default is `false` (no proxy trust, req.ip is always the
     // raw socket address) — that's also our default here, so leaving
     // TRUST_PROXY unset preserves current dev/test behavior exactly. In
@@ -119,6 +160,24 @@ const envSchema = z
           code: z.ZodIssueCode.custom,
           path: ["TEST_LOGIN_USERNAME"],
           message: "TEST_LOGIN_ENABLED=true requires both TEST_LOGIN_USERNAME and TEST_LOGIN_PASSWORD to be set.",
+        });
+      }
+    }
+
+    if (data.KAI_MODEL_PROVIDER !== "none") {
+      if (!data.KAI_MODEL_URL?.trim() || !data.KAI_MODEL_NAME?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["KAI_MODEL_URL"],
+          message: `KAI_MODEL_PROVIDER=${data.KAI_MODEL_PROVIDER} requires KAI_MODEL_URL and KAI_MODEL_NAME (or set KAI_MODEL_PROVIDER=none).`,
+        });
+      } else if (isProprietaryModelHost(data.KAI_MODEL_URL)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["KAI_MODEL_URL"],
+          message:
+            "KAI_MODEL_URL points at a paid proprietary LLM API, which KAI must not use. Point it at a local or " +
+            "self-hosted open-weight model server (Ollama, vLLM, llama.cpp) or set KAI_MODEL_PROVIDER=none.",
         });
       }
     }

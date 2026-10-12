@@ -15,6 +15,13 @@ npm run backend:start   # http://localhost:4000
 
 Health check: `GET /health` → `{"status":"ok"}`
 
+## KAI — business assistant
+
+`POST /kai/chat` answers the owner (Tamil, Tanglish, English) from the shop's own records: balances, totals, overdue,
+today's collections, stock, sums, and drafts entries that are saved only after `POST /kai/actions/:id/confirm`.
+No paid LLM API; an optional self-hosted open-weight model only rephrases. Details: `apps/backend/src/kai/README.md`.
+Evaluation: `npm run kai:eval -w @shop-ai/backend`.
+
 ## Cloud deployment
 
 See **[DEPLOY.md](./DEPLOY.md)** for Render + Neon + Vercel setup.

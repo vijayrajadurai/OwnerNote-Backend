@@ -29,6 +29,11 @@ services:
         value: firebase
       - key: JWT_EXPIRES_IN
         value: 30d
+      # KAI: rule-based engine (no AI model) until a self-hosted model server exists.
+      - key: KAI_MODEL_PROVIDER
+        value: none
+      - key: KAI_HISTORY_RETENTION_DAYS
+        value: "180"
       # --- Set these in the Render dashboard (secrets / per-deploy values) ---
       - key: DATABASE_URL
         sync: false
