@@ -8,6 +8,7 @@ export const MAX_LEDGER_AMOUNT = 10_000_000;
 
 const MULTIPLIERS: Record<string, number> = {
   k: 1_000, thousand: 1_000, aayiram: 1_000, ayiram: 1_000, aayram: 1_000,
+  aayirathuku: 1_000, aayirathukku: 1_000, aayiratthukku: 1_000, aayirathula: 1_000,
   lakh: 100_000, lakhs: 100_000, lac: 100_000, laksham: 100_000, latcham: 100_000,
   crore: 10_000_000, crores: 10_000_000, cr: 10_000_000,
 };
@@ -18,7 +19,7 @@ const MULTIPLIERS: Record<string, number> = {
  */
 export function amountsIn(text: string): number[] {
   const out: number[] = [];
-  const re = /(?:₹|rs\.?|inr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|thousand|aayiram|ayiram|aayram|lakhs?|lac|laksham|latcham|crores?|cr)?(?![\p{L}\d])/giu;
+  const re = /(?:₹|rs\.?|inr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|thousand|aayirathuku|aayirathukku|aayiratthukku|aayirathula|aayiram|ayiram|aayram|lakhs?|lac|laksham|latcham|crores?|cr)?(?![\p{L}\d])/giu;
   for (const m of text.matchAll(re)) {
     const digits = m[1].replace(/,/g, "");
     const after = text.slice((m.index ?? 0) + m[0].length);
@@ -30,6 +31,48 @@ export function amountsIn(text: string): number[] {
     out.push(Math.round(value * 100) / 100);
   }
   return out;
+}
+
+// Money said in words ("moonu aayiram", "rendaayiram", "aayirathu ainooru"), only when no figure was said.
+const UNITS: Record<string, number> = {
+  onnu: 1, oru: 1, rendu: 2, irandu: 2, moonu: 3, naalu: 4, anju: 5, aaru: 6, ezhu: 7, ettu: 8, ombodhu: 9, pathu: 10,
+};
+const HUNDREDS: Record<string, number> = {
+  nooru: 100, irunooru: 200, munnooru: 300, naanooru: 400, ainooru: 500, arunooru: 600, ezhunooru: 700, ennooru: 800, thollaayiram: 900,
+};
+const THOUSANDS: Record<string, number> = {
+  aayiram: 1000, aayirathu: 1000, rendaayiram: 2000, moovaayiram: 3000, naalaayiram: 4000, anjaayiram: 5000, aaraayiram: 6000,
+  ezhaayiram: 7000, ettaayiram: 8000, pathaayiram: 10000,
+};
+
+export function amountInWords(text: string): number | undefined {
+  const words = text.toLowerCase().replace(/[.,!?]/g, " ").split(/\s+/).filter(Boolean);
+  let total = 0;
+  let pending = 0;
+  let seen = false;
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (UNITS[w] !== undefined && (THOUSANDS[words[i + 1]] === 1000 || HUNDREDS[words[i + 1]] === 100 || /^lakh/.test(words[i + 1] ?? ""))) {
+      pending = UNITS[w];
+    } else if (THOUSANDS[w] !== undefined) {
+      total += (pending || 1) * THOUSANDS[w];
+      pending = 0;
+      seen = true;
+    } else if (HUNDREDS[w] !== undefined) {
+      total += (pending || 1) * HUNDREDS[w];
+      pending = 0;
+      seen = true;
+    } else if (/^lakh/.test(w)) {
+      total += (pending || 1) * 100000;
+      pending = 0;
+      seen = true;
+    } else if (seen && UNITS[w] !== undefined && i === words.length - 1) {
+      total += UNITS[w];
+    } else if (seen) {
+      break;
+    }
+  }
+  return seen && total > 0 ? total : undefined;
 }
 
 type Token = { type: "num"; value: number } | { type: "op"; value: string };

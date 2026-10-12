@@ -149,9 +149,38 @@ describe("KAI API", () => {
     });
 
     it("a claim that differs from the records is checked, not accepted", async () => {
-      const d = (await chatAs(tokenA, "Kumar 3000 tharanum").expect(200)).body.data;
+      const d = (await chatAs(tokenA, "Kumar 3000 thaane tharanum?").expect(200)).body.data;
       expect(d.reply).toContain("₹7,000");
       expect(d.reply).toMatch(/match aagala/);
+    });
+
+    it("reports by topic and period, from the records — typed, mic Tamil and English alike", async () => {
+      const typed = (await chatAs(tokenA, "customer pending amount-ai kaattunga").expect(200)).body.data;
+      const mic = (await chatAs(tokenA, "வாடிக்கையாளர் நிலுவை-ஐ காட்டுங்கள்").expect(200)).body.data;
+      expect(typed.intent).toBe("TOTAL_RECEIVABLE");
+      expect(mic.intent).toBe("TOTAL_RECEIVABLE");
+      expect(typed.facts[0].value).toBe(mic.facts[0].value);
+      const pending = (await chatAs(tokenA, "Moththa baaki evlo iruku?").expect(200)).body.data;
+      expect(pending.intent).toBe("REPORT");
+      expect(pending.reply).toMatch(/tharanum .*kudukanum/);
+      // No Daily Cash report yet: said plainly, no number.
+      const cash = (await chatAs(tokenA, "Cash balance kaatu").expect(200)).body.data;
+      expect(cash.reply).toMatch(/Daily Cash report innum submit pannala/);
+      expect(cash.facts).toEqual([]);
+      const profit = (await chatAs(tokenA, "Indha maasam laabam evlo?").expect(200)).body.data;
+      expect(profit.reply).toMatch(/guess panna maatten/);
+      const supplierList = (await chatAs(tokenA, "Clearly, show me the supplier list.").expect(200)).body.data;
+      expect(supplierList.reply).toMatch(/^2 suppliers/);
+    });
+
+    it("a cash expense or sale with nobody in it is never a person's entry", async () => {
+      const expense = (await chatAs(tokenA, "innaikku arisi 500 rooba selavaachu").expect(200)).body.data;
+      expect(expense.intent).toBe("HOW_TO");
+      expect(expense.draft).toBeUndefined();
+      expect(expense.reply).toMatch(/Daily Cash/);
+      const sale = (await chatAs(tokenA, "இன்னைக்கு பால் வித்ததுல 2000 ரூபா வந்துச்சு").expect(200)).body.data;
+      expect(sale.intent).toBe("HOW_TO");
+      expect(sale.draft).toBeUndefined();
     });
   });
 
@@ -189,6 +218,25 @@ describe("KAI API", () => {
       expect([a.status, b.status]).toEqual([200, 200]);
       expect([a.body.data.replayed, b.body.data.replayed].sort()).toEqual([false, true]);
       expect(await kumarPaid()).toBe(before + 100);
+    });
+
+    it("'Kumar enakku 500 tharanum' is a new credit entry, 'naan Ravi Traders-ku 900 kudukanum' a purchase entry", async () => {
+      const credit = (await chatAs(tokenA, "Kumar enaku 500 rooba kudukanum").expect(200)).body.data;
+      expect(credit.intent).toBe("ADD_CREDIT");
+      expect(credit.draft.summary).toContain("₹500");
+      // Kumar already owes money: Kai asks whether this is new money on top, before anything is saved.
+      expect(credit.draft.warnings.some((w: string) => /already Kumar tharanum/.test(w))).toBe(true);
+      const mic = (await chatAs(tokenA, "குமார் எனக்கு 500 ரூபா குடுக்கணும்").expect(200)).body.data;
+      expect(mic.intent).toBe("ADD_CREDIT");
+      const debit = (await chatAs(tokenA, "Naan Ravi Tradersku 900 rooba kudukanum").expect(200)).body.data;
+      expect(debit.intent).toBe("ADD_DEBIT");
+      expect(debit.draft.summary).toContain("Ravi Traders");
+    });
+
+    it("paying someone not in the books is asked about, not guessed", async () => {
+      const d = (await chatAs(tokenA, "Naan Kannanku 300 rooba kuduthuten").expect(200)).body.data;
+      expect(d.draft).toBeUndefined();
+      expect(d.reply).toMatch(/credit kudutheengala/);
     });
 
     it("refuses a payment larger than what is pending (no draft)", async () => {

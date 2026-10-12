@@ -60,7 +60,18 @@ export function soundKey(word: string): string {
     .replace(/[jz]/g, "s")
     .replace(/[ey]/g, "i")
     .replace(/o/g, "u");
-  return s.replace(/(.)\1+/g, "$1");
+  // Tamil writes "Lakshmi" as லட்சுமி ("latsumi").
+  return s.replace(/ts/g, "ks").replace(/(.)\1+/g, "$1");
+}
+
+/** How the mic spells an acronym in Tamil letters: "ABC" → ஏபிசி ("eepisi"). */
+const LETTER_SOUNDS: Record<string, string> = {
+  a: "ee", b: "pi", c: "si", d: "ti", e: "i", f: "ep", g: "ji", h: "ech", i: "ai", j: "je", k: "ke", l: "el", m: "em",
+  n: "en", o: "o", p: "pi", q: "kyu", r: "ar", s: "es", t: "ti", u: "yu", v: "vi", w: "tapilyu", x: "eks", y: "vai", z: "set",
+};
+function acronymKey(word: string): string | undefined {
+  if (!/^[A-Z]{2,6}$/.test(word)) return undefined;
+  return soundKey([...word.toLowerCase()].map((c) => LETTER_SOUNDS[c] ?? c).join(""));
 }
 
 /** The consonants of a sound key: "piritania" (பிரிட்டானியா) and "pritania" (Britannia) are both "prtn". */
@@ -74,9 +85,15 @@ function keyForms(key: string): string[] {
   return skel.length >= 3 ? [key, `~${skel}`] : [key];
 }
 
-/** Two names are the same name by sound ("Kumar" / "குமார்"). */
+/** Two names are the same name by sound ("Kumar" / "குமார்", "Prabhu" / "பிரபு"). */
 export function sameName(a: string, b: string): boolean {
-  return tokens(a).map(soundKey).join(" ") === tokens(b).map(soundKey).join(" ");
+  const ka = tokens(a).map(soundKey);
+  const kb = tokens(b).map(soundKey);
+  if (ka.join(" ") === kb.join(" ")) return true;
+  return ka.length === kb.length && ka.every((k, i) => {
+    const sa = skeleton(k);
+    return sa.length >= 3 && sa === skeleton(kb[i]);
+  });
 }
 
 /** What the owner glues onto a name: "Kumar-ku", "Kumarkitta", "குமாருக்கு", "Kumar oda". */
@@ -90,7 +107,9 @@ function nameForms(token: string): string[] {
     if (head.length - tail.length >= 3 && head.endsWith(tail)) forms.add(soundKey(head.slice(0, -tail.length)));
   }
   forms.delete("");
-  return [...forms].flatMap(keyForms);
+  // The consonant skeleton only for what the mic wrote in Tamil letters ("பிரிட்டானியா" for Britannia): typed English
+  // words keep their vowels, so "collect" is never "Colgate".
+  return /[\u0B80-\u0BFF]/.test(token) ? [...forms].flatMap(keyForms) : [...forms];
 }
 
 /** Words that are never part of a name (the ask itself, money, particles). */
@@ -105,7 +124,76 @@ const NOT_NAME = new Set([
   "customer", "total", "motham", "today", "inniku", "yaaru", "yaar", "who", "please", "konjam", "sir", "anna", "owner",
   "returned", "received", "vanthuchu", "vandhuchu", "venum", "check", "paaru", "tell", "show", "has", "have", "in", "on",
   "at", "with", "udhaar", "advance", "settle", "settled", "full", "half", "now", "ippo", "innum", "still", "left", "remaining",
+  // How owners start a line ("konjam…", "kanakkula…", "padhivula…") and the words around a name.
+  "enaku", "konjam", "vegamaa", "kanakkula", "padhivula", "oru", "thadava", "seekiram", "sari", "indha", "andha", "endha", "idhu",
+  "innaiku", "innaikku", "nethu", "naalaikku", "naalaiku", "rooba", "roobaya", "roobaikku", "roobai", "irundhu", "seru", "podu",
+  "vandhuchu", "baaki", "baakiya", "baakila", "baakiyoda", "kooduthalaa", "varavu", "varavula", "selavula", "record", "yaar",
+  "yaaru", "kanakku", "kadai", "kadaiku", "kaatu", "kaattu", "kaattunga", "list", "customer-ai", "supplier-ai", "entry", "evlo-nu",
+  // Everyday goods and expenses — never a person (a shop's own products are matched separately, by sound).
+  "arisi", "ennai", "sarkkarai", "cement", "irumbu", "kambi", "mobile", "paal", "kaaykari", "tea", "thool", "soap", "biscuit",
+  "maligai", "saamaan", "spare", "parts", "cool", "drinks", "cool-drinks", "notebook", "book", "sarakku", "porul", "rent", "current",
+  "petrol", "diesel", "salary", "sambalam", "kooli", "gas", "thanni", "rice", "oil", "sugar", "milk", "vegetables", "groceries",
+  "aayirathuku", "aayiratthukku", "aayirathukku", "ella", "niluvai", "niluvaiyum", "munnadi", "munnaadi", "naan", "sonna", "thappu",
+  // English sentence words that start with a capital but are never a name.
+  "yesterday", "tomorrow", "today", "this", "that", "week", "month", "which", "whose", "where", "why", "did", "was", "were", "there",
+  "you", "your", "it", "its", "increase", "record", "remove", "change", "delete", "once", "quickly", "please", "for", "also",
+  "spent", "sold", "bought", "made", "cost", "still", "need", "another", "additional", "amount", "balance", "payable", "receivable",
+  "rupees", "money", "cash", "shop", "shops", "all", "everyone", "who", "what", "show", "tell", "list", "outstanding",
+  "vithadhula", "vithen", "selavaachu", "selling", "sell", "buy", "buying", "spend", "spending", "sales", "sale", "vaanga",
+  "first", "more", "before", "again", "settle", "collect", "get", "receive", "give", "take", "the", "him", "her", "them",
+  // Report words ("account entries-ai kaattunga") and polite openers ("Thayavu senju…", "Could you…").
+  "entries", "details", "report", "history", "received", "made", "pending", "changes", "summary", "stock", "purchase",
+  "expense", "expenses", "profit", "loss", "collection", "transaction", "transactions", "accounts", "statement", "ledger",
+  "thayavu", "senju", "muzhusaa", "thelivaaga", "could", "would", "completely", "clearly", "now", "can", "okay", "ok",
+  "weekly", "monthly", "total", "recent", "morning", "evening", "full", "separately", "related", "details-ai", "report-ai",
+  "pannadhai", "panna", "pannunga", "partial", "konjam", "mattum", "receipt", "invoice", "discount", "tax", "upi", "neft",
+  "find", "apply", "mark", "attach", "set", "open", "close", "search", "filter", "select", "generate", "create", "prepare",
+  "send", "reconcile", "export", "download", "update", "enter", "edit", "items", "item", "products", "product", "vandha",
+  "percent", "sadhaveedham", "this", "sale", "entry-ai", "panam", "mothama", "moththa", "motham", "vendiya", "vendiyavanga",
+  "thogai", "thogaiya", "amounts", "ellaaraiyum", "vanginadhai", "vaanginadhai", "petradhai", "kadaiyin", "kadaiyila",
+  "surukkathai", "surukkam", "thirakkavum", "customers", "suppliers", "varalaaraiyum", "kanakkin", "kanakkai", "muzhu",
+  "tharpothaiya", "iruppai", "reminder", "limit", "overdue", "date", "last", "phone", "number", "name", "ready", "pdf",
 ]);
+
+/** "Kumaruku" → "Kumar", "Manikitta" → "Mani", "குமாருக்கு" → "குமார்": the name without what is glued onto it. */
+export function bareName(token: string): string {
+  const t = token.replace(/'s$/i, "").replace(/-(?:ku|kku|ukku|kitta|oda|ai|a|ah|la|ஐ|க்கு|கிட்ட)$/i, "");
+  if (/[\u0B80-\u0BFF]/.test(t)) {
+    // Formal Tamil adds a consonant after the case ending: "குமாருக்குக்", "குமாருக்குப்".
+    const s = t.replace(/(கு|கிட்ட|ட)[கசதப]்$/, "$1");
+    if (s !== t) return bareName(s);
+    // "சரவணனிடமிருந்து" (from Saravanan).
+    if (/ிடமிருந்து$/.test(t)) return t.replace(/ிடமிருந்து$/, "்");
+    if (/இடமிருந்து$/.test(t)) return t.replace(/இடமிருந்து$/, "");
+    // "குமாருக்கு" is Kumar + ukku, "பிரபுக்கு" is Prabhu + kku: the "u" is the name's own unless it follows ர ன ண ல ள ழ ய ஷ ஸ.
+    const u = /^(.*[ரனணலளழயஷஸ])ு(?:க்கு|கிட்ட|க்|ோட)$/.exec(t) ?? /^(.*[ரனணலளழயஷஸ])ோட$/.exec(t);
+    if (u) return `${u[1]}்`;
+    return t.replace(/(?:க்கு|கிட்ட|கு|ோட)$/, (m) => (m === "ோட" ? "்" : ""));
+  }
+  const from = /^(.{3,}?)(?:kitta|kitte|oda)$/i.exec(t);
+  if (from) return from[1];
+  // "Kumaruku" / "Sujithukku" are Kumar / Sujith + u(k)ku; "Prabhuku" is Prabhu + ku; "Karthikku" is Karthik + ku.
+  const uku = /^(.{3,}?)u(?:kku|ku)$/i.exec(t);
+  if (uku && /[^aeiou]$/i.test(uku[1]) && !/[bdgkp]h$/i.test(uku[1])) return uku[1];
+  const ku = /^(.{3,}?)ku$/i.exec(t);
+  return ku ? ku[1] : t;
+}
+
+/** How the name was said: "Kumar-ku" / "Kumaruku" / "குமாருக்கு" (to him), "Kumar kitta" (from him), or plain. */
+export function caseOfName(text: string, said: string): "DATIVE" | "FROM" | "PLAIN" {
+  const words = tokens(text);
+  const saidWords = tokens(said);
+  if (saidWords.length === 0) return "PLAIN";
+  const lastSaid = saidWords[saidWords.length - 1];
+  const at = words.findIndex((w) => w === lastSaid || bareName(w) === bareName(lastSaid) || bareName(w).toLowerCase() === lastSaid.toLowerCase());
+  const last = at >= 0 ? words[at] : lastSaid;
+  const next = (at >= 0 ? words[at + 1] ?? "" : "").toLowerCase();
+  if (/(?:-?(?:ku|kku|ukku|uku))$/i.test(last) && bareName(last) !== last) return "DATIVE";
+  if (/(?:க்கு|கு)(?:[கசதப]்)?$/.test(last)) return "DATIVE";
+  if (/^(?:ku|-ku|kku|ukku|க்கு)$/.test(next)) return "DATIVE";
+  if (/(?:kitta|kitte|கிட்ட|இடமிருந்து|ிடமிருந்து)$/i.test(last) || /^(?:kitta|kitte|irundhu)$/.test(next)) return "FROM";
+  return "PLAIN";
+}
 
 function tokens(text: string): string[] {
   return text.split(/[\s,?!.:;]+/).filter(Boolean);
@@ -135,7 +223,13 @@ export function matchParty(
   if (words.length === 0) return { status: "NONE" };
   const wordForms = words.map(nameForms);
 
-  const candidates: Candidate[] = parties.map((p) => ({ ref: p, keys: tokens(p.name).map(soundKey).filter(Boolean) }));
+  const candidates: Candidate[] = parties.flatMap((p) => {
+    const words = tokens(p.name);
+    const plain = { ref: p, keys: words.map(soundKey).filter(Boolean) };
+    // "ABC Traders" also as the mic spells it: ஏபிசி டிரேடர்ஸ்.
+    const spelled = words.map((w) => acronymKey(w) ?? soundKey(w));
+    return spelled.join(" ") !== plain.keys.join(" ") ? [plain, { ref: p, keys: spelled }] : [plain];
+  });
   for (const a of aliases) {
     const targetKeys = tokens(a.partyName).map(soundKey).join(" ");
     for (const p of parties) {
@@ -170,25 +264,56 @@ export function matchParty(
   }
 
   const said = unknownName(words);
-  return said ? { status: "UNKNOWN", said } : { status: "NONE" };
+  if (said) return { status: "UNKNOWN", said };
+  const guessed = nameByGrammar(text);
+  return guessed ? { status: "UNKNOWN", said: guessed, guessed: true } : { status: "NONE" };
 }
 
 /** A word that looks like a person's name but is in no record: "Suresh-ku 500 credit" with no Suresh. */
+/** What follows a person's name in a ledger line: "குமார் எனக்கு…", "குமார் கிட்ட…", "குமார் 500…", "குமார் கணக்கு…". */
+const PERSON_NEXT = /^(?:\d|₹|enakku|enaku|kitta|innum|thara|kudutha|baakila|baakiyoda|kanakku|kanakkula|evlo|evlo-nu|irundhu|oda|kuduthaan|kuduthaar|kuduthuttaaru|kuduthutaan|kudthan|kattinaan|kattittaaru|pottan|thandhutaan|thandhutaanga|anuppinaaru|ku|kadan|credit|baaki|tharanum|kudukanum|kudukkanum)/;
+
 function unknownName(words: string[]): string | undefined {
   const picked: string[] = [];
-  for (const w of words) {
-    const bare = w.replace(/-.*$/, "");
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const bare = bareName(w);
     const lower = bare.toLowerCase();
-    const isName = /^[\p{L}][\p{L}\p{M}.']*$/u.test(bare) && !NOT_NAME.has(lower) && !/^\d/.test(bare) && lower.length >= 3;
-    const tail = /-(ku|kitta|oda|kku|ukku)$/i.test(w) || /(க்கு|கிட்ட|ுக்கு)$/.test(w);
-    if (isName && (tail || /^[A-Z\u0B80-\u0BFF]/.test(bare))) {
+    const isName = /^[\p{L}][\p{L}\p{M}.']*$/u.test(bare) && !NOT_NAME.has(lower) && !NOT_NAME.has(w.toLowerCase()) && lower.length >= 3;
+    const tail = bare !== w;
+    const tamil = /[\u0B80-\u0BFF]/.test(bare);
+    // A Tamil-script word the mic wrote is a name only where a name stands — a case ending, or a ledger word after it —
+    // so a verb Kai doesn't know ("திறக்கவும்") is never taken for a person.
+    const placed = tail || PERSON_NEXT.test((words[i + 1] ?? "").toLowerCase()) || (picked.length > 0 && PERSON_NEXT.test((words[i + 1] ?? "").toLowerCase()));
+    if (isName && (tamil ? placed || picked.length > 0 : tail || /^[A-Z]/.test(bare))) {
       picked.push(bare.charAt(0).toUpperCase() + bare.slice(1));
       if (tail) break;
     } else if (picked.length > 0) break;
   }
   if (picked.length === 0) return undefined;
-  const name = picked.slice(0, 3).join(" ");
-  return name.replace(/(க்கு|ுக்கு|கிட்ட)$/, "");
+  return picked.slice(0, 3).join(" ");
+}
+
+/**
+ * A name typed in lower case, read from where it stands: "kumar owes me 500", "i owe kumar 500", "kumar-ku 500",
+ * "suresh 500 kuduthaan" (a word right before the amount and a money verb). Only words that are not the ask itself.
+ */
+function nameByGrammar(text: string): string | undefined {
+  const t = text.toLowerCase();
+  const pick = (w?: string) => {
+    if (!w) return undefined;
+    const bare = bareName(w);
+    if (bare.length < 3 || NOT_NAME.has(bare) || NOT_NAME.has(w) || !/^[a-z]+$/.test(bare)) return undefined;
+    return bare.charAt(0).toUpperCase() + bare.slice(1);
+  };
+  const before =
+    /(?:^|[\s,])([a-z]+(?:'s)?)\s+(?:owes|still\s+hasn'?t|has\s+to|paid\s+me|gave\s+me|sent\s+me)\b/.exec(t) ??
+    /\b(?:does|did|will)\s+([a-z]+)\s+(?:owe|have\s+to|pay)\b/.exec(t) ??
+    /(?:^|[\s,])([a-z]+)\s+(?:paid|gave|sent|returned)\s+(?:₹|rs\.?\s*)?\d/.exec(t);
+  const after = [...t.matchAll(/\b(?:owe|paid|pay|to|from|with)\s+(?=([a-z]+)(?:'s)?\b)/g)].map((m) => pick(m[1])).find(Boolean);
+  const glued = /(?:^|\s)([a-z]{3,}(?:ku|kitta))\s+(?:\d|innum|kudukka|thara|naan)/.exec(t);
+  const lead = /^(?:\S+\s+){0,2}?([a-z]{3,})\s+(?:enaku|enakku|kitta|innum|thara|kudutha|baakila|baakiyoda|kanakku|kanakkula|evlo|\d)/.exec(t);
+  return pick(before?.[1]) ?? after ?? pick(glued?.[1]) ?? pick(lead?.[1]);
 }
 
 /** The shop's product the owner named (by sound, whole words), or nothing. */

@@ -24,6 +24,7 @@ POST /kai/chat ─► engine.chat()
 | `names.ts` | Tamil ⇄ Latin transliteration, sound keys, person / product matching (FOUND / AMBIGUOUS / UNKNOWN) |
 | `numbers.ts` | Amount parsing (k, lakh, aayiram), a small safe arithmetic parser — nothing is `eval`'d |
 | `intent.ts` | Rule-based understanding; pure, unit-tested, scored by `eval/` |
+| `report.ts` | Report topic + period ("கடந்த மாத பண வரவு", "customer pending amount"), and what Kai doesn't write from chat (`HOW_TO`) |
 | `tools.ts` | Read-only, businessId-scoped business tools (balances, totals, overdue, today, stock, cash flow, duplicates) |
 | `replies.ts` | The words of each answer in three languages |
 | `actions.ts` | Typed drafts (zod), confirm in one DB transaction, idempotent, optimistic concurrency, audit log |
@@ -79,6 +80,13 @@ Development with a local model: install Ollama, `ollama pull qwen2.5:7b-instruct
 
 - `npm run kai:eval` scores `intent.understand` on `eval/goldenSet.ts` (tests require 100%). Add a line for every new
   rule, and a line Kai must *not* match.
+- `npm run kai:dataset -- <file.json> [intents|topics]` scores a whole owner dataset (rows of `{intent, ta, th, en}`):
+  typed Tanglish, mic Tamil and English, and whether typed and mic give the same result. Samples of the owner's two
+  datasets (12 Oct 2026) are in `tests/fixtures/` and `tests/kai.dataset.test.ts` requires 100% on them:
+  - `Kai_Local_Tamil_Thanglish_100000` (labels trusted) — who owes whom is read from how the name is said
+    ("Kumar-ku / Kumaruku / குமாருக்கு" = to the person) and the verb (still owed / already paid);
+  - `Kai_100000_Dataset` — its labels are not usable (the same sentence carries up to 28 labels), so it is scored by the
+    report topic each sentence names (`report.ts`: topic + period).
 - Owners can rate any reply and opt in (`allowTraining`); `GET /kai/feedback/export` gives the redacted set an admin
   can use to evaluate a model or prepare a future fine-tune. Nothing is trained automatically.
 

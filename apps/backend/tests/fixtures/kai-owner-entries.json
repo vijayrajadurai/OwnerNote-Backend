@@ -1,0 +1,272 @@
+[
+ {
+  "said": "Kumar settle pannitaan 4000",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 4000
+ },
+ {
+  "said": "Ramesh 2500 clear pannitaan",
+  "kind": "IN",
+  "name": "Ramesh",
+  "amount": 2500
+ },
+ {
+  "said": "Kumar 1000 anuppichan",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 1000
+ },
+ {
+  "said": "ABC Traders ku 3000 kattinen",
+  "kind": "OUT",
+  "name": "ABC Traders",
+  "amount": 3000
+ },
+ {
+  "said": "Murugan Stores ku 2000 anuppichen",
+  "kind": "OUT",
+  "name": "Murugan Stores",
+  "amount": 2000
+ },
+ {
+  "said": "Selvam 1000 kuduthaaru",
+  "kind": "IN",
+  "name": "Selvam",
+  "amount": 1000
+ },
+ {
+  "said": "Lakshmi 300 thandhutaanga",
+  "kind": "IN",
+  "name": "Lakshmi",
+  "amount": 300
+ },
+ {
+  "said": "Kumar ku 500 credit",
+  "kind": "CREDIT",
+  "name": "Kumar",
+  "amount": 500
+ },
+ {
+  "said": "Kumar 2000 kattinan",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 2000
+ },
+ {
+  "said": "Kumar 2000 rupees katti tan",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 2000
+ },
+ {
+  "said": "Kumar kuduthar 2000",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 2000
+ },
+ {
+  "said": "Kumar kuduthar moonu aayiram.",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 3000
+ },
+ {
+  "said": "innaiku ABC Traders ku 3000 kudukkanum",
+  "kind": "DEBIT",
+  "name": "ABC Traders",
+  "amount": 3000
+ },
+ {
+  "said": "innaiku ABC Traders ku 1500 pay pannen",
+  "kind": "OUT",
+  "name": "ABC Traders",
+  "amount": 1500
+ },
+ {
+  "said": "ippo லட்சுமி enakku 750 tharanum",
+  "kind": "CREDIT",
+  "name": "Lakshmi",
+  "amount": 750
+ },
+ {
+  "said": "ABC Traders ku 2000 anuppiachu",
+  "kind": "OUT",
+  "name": "ABC Traders",
+  "amount": 2000
+ },
+ {
+  "said": "ABC Traders ku 3000 neft panniten",
+  "kind": "OUT",
+  "name": "ABC Traders",
+  "amount": 3000
+ },
+ {
+  "said": "Kumar 1500 kudthan",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 1500
+ },
+ {
+  "said": "kudhuthan Kumar 1500",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 1500
+ },
+ {
+  "said": "hmm Kumar 1500 kuduthan",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 1500
+ },
+ {
+  "said": "சுஜித் எனக்கு 2000 தரணும்",
+  "kind": "CREDIT",
+  "name": "சுஜித்",
+  "amount": 2000
+ },
+ {
+  "said": "சுஜித் 2000 தரணும்",
+  "kind": "CREDIT",
+  "name": "சுஜித்",
+  "amount": 2000
+ },
+ {
+  "said": "சுஜித் எனக்கு 2000 குடுக்கணும்",
+  "kind": "CREDIT",
+  "name": "சுஜித்",
+  "amount": 2000
+ },
+ {
+  "said": "சுஜித் 2000 கடன்",
+  "kind": "CREDIT",
+  "name": "சுஜித்",
+  "amount": 2000
+ },
+ {
+  "said": "குமார் எனக்கு 2000 தரணும்",
+  "kind": "CREDIT",
+  "name": "Kumar",
+  "amount": 2000
+ },
+ {
+  "said": "Sujith 2000 kadan",
+  "kind": "CREDIT",
+  "name": "Sujith",
+  "amount": 2000
+ },
+ {
+  "said": "Sujithukku 2000 kadan koduthen",
+  "kind": "CREDIT",
+  "name": "Sujith",
+  "amount": 2000
+ },
+ {
+  "said": "குமார் 2000 குடுத்தான்",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 2000
+ },
+ {
+  "said": "ரமேஷ் கிட்ட இருந்து ரெண்டாயிரம் வந்துச்சு",
+  "kind": "IN",
+  "name": "Ramesh",
+  "amount": 2000
+ },
+ {
+  "said": "செல்வம் 1500 ஜிபேல அனுப்பினாரு",
+  "kind": "IN",
+  "name": "Selvam",
+  "amount": 1500
+ },
+ {
+  "said": "ஏபிசி டிரேடர்ஸுக்கு 3000 குடுத்தேன்",
+  "kind": "OUT",
+  "name": "ABC Traders",
+  "amount": 3000
+ },
+ {
+  "said": "முருகன் ஸ்டோர்ஸுக்கு 1000 பே பண்ணேன்",
+  "kind": "OUT",
+  "name": "Murugan Stores",
+  "amount": 1000
+ },
+ {
+  "said": "லட்சுமிக்கு ஆயிரத்து ஐநூறு கடன் குடுத்தேன்",
+  "kind": "CREDIT",
+  "name": "Lakshmi",
+  "amount": 1500
+ },
+ {
+  "said": "நான் ஏபிசி டிரேடர்ஸுக்கு 2000 தரணும்",
+  "kind": "DEBIT",
+  "name": "ABC Traders",
+  "amount": 2000
+ },
+ {
+  "said": "Kumar kitta 2000 vaanginen",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 2000
+ },
+ {
+  "said": "ABC டிரேடர்ஸுக்கு 2000 அனுப்பியாச்சு",
+  "kind": "OUT",
+  "name": "ABC Traders",
+  "amount": 2000
+ },
+ {
+  "said": "குமார் 1500 குட்தான்",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 1500
+ },
+ {
+  "said": "ம்ம் குமார் 1500 குடுத்தான்",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 1500
+ },
+ {
+  "said": "ABC டிரேடர்ஸுக்கு 3000 நெஃப்ட் பண்ணிட்டேன்",
+  "kind": "OUT",
+  "name": "ABC Traders",
+  "amount": 3000
+ },
+ {
+  "said": "Kumar 2000 pottan",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 2000
+ },
+ {
+  "said": "Kumar 2000 adachitan",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 2000
+ },
+ {
+  "said": "Kumar 2000 transfer pannan",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 2000
+ },
+ {
+  "said": "குமார் 2000 போட்டான்",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 2000
+ },
+ {
+  "said": "குமார் 2000 டிரான்ஸ்ஃபர் பண்ணான்",
+  "kind": "IN",
+  "name": "Kumar",
+  "amount": 2000
+ },
+ {
+  "said": "ABC Traders ku 3000 potten",
+  "kind": "OUT",
+  "name": "ABC Traders",
+  "amount": 3000
+ }
+]

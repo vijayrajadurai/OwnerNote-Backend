@@ -1,6 +1,7 @@
 import { detectLang, normalize } from "./language";
-import { matchParty, matchProduct, sameName } from "./names";
-import { amountsIn, expressionIn } from "./numbers";
+import { caseOfName, matchParty, matchProduct, sameName } from "./names";
+import { amountInWords, amountsIn, expressionIn } from "./numbers";
+import { howTo, reportPeriod, reportTopic } from "./report";
 import type { KaiIntent, KaiTurnContext, MoneyDirection, PartyMatch, PartyRef, ProductRef, Understanding } from "./types";
 
 /**
@@ -40,12 +41,12 @@ const BOUGHT = words("bought|purchased|purchase|goods vanthuchu|saamaan vanthuch
 const CREDIT_WORD = words("credit|kadan|udhaar|udhar|add|ezhuthu|eluthu|podu|entry|write|note pannu|sale");
 
 const OVERDUE = /overdue|due\s*date\s*(mudinj|thaand|cross|pass|over)|late\s*(payment|aana)|yaar(u)?\s*(yaar(u)?\s*)?kitta\s*(vaanganum|vasool)|who\s+(should\s+i|to|do\s+i)\s+collect|collect\s+from|vasool\s+pann|yaar(u)?\s*(yaar(u)?\s*)?tharanum|yaaru\s+ellam\s+tharanum/i;
-const RECEIVABLE = words("tharanum|tharanam|varanum|vaanganum|receivable|receivables|to receive|owed to me|vara vendiyathu|market la|outside|velila");
+const RECEIVABLE = words("tharanum|tharanam|varanum|vaanganum|receivable|receivables|to receive|owed to me|vara vendiyathu|market la|outside|velila|owe me|collect money|need to collect");
 const PAYABLE = words("kudukanum|kudukkanum|payable|payables|i owe|to pay|kodukka vendiyathu|suppliers ku|supplier ku");
 const TOTAL = words("total|motham|ellarum|everyone|all|overall|full");
 const LOW_STOCK = /low\s*stock|stock\s*(kammi|kuraivu|illa|theernthu|over)|kammi\s*(aa|ah|aana|ana)?\s*(stock|item|product)|theernthu|out\s*of\s*stock|re-?order|enna\s*(enna\s*)?(kammi|theernthu)|stock\s*la\s*kammi|running\s*low/i;
 const STOCK = words("stock|inventory|iruku|irukku|irukka|how many|ethana|ethanai|left|available|kaiyila");
-const CASH_FLOW = /next\s*(7\s*days|week)|adutha\s*vaaram|cash\s*flow|cashflow|varum\s*vaaram|coming\s*week|7\s*naal/i;
+const CASH_FLOW = /next\s*(7\s*days|week|vaaram)|adutha\s*vaaram|cash\s*flow|cashflow|varum\s*vaaram|coming\s*week|7\s*naal/i;
 const TODAY = /(inniku|innikku|today|indru|inru)\b.*(sales|vasool|collection|enna\s*nadanth|summary|report|kanakku|evlo|how much|business|vyabaaram)|(sales|collection|summary|report)\b.*\b(inniku|today)/i;
 const GREETING = /^(hi+|hello|hey|hai|vanakkam|good\s*(morning|afternoon|evening)|namaste|namaskaram)\b/i;
 const THANKS = /^(thanks|thank\s*you|nandri|tq|thx|super|nice|great|ok\s*thanks|romba\s*nandri)\b/i;
@@ -64,7 +65,59 @@ const ALIAS = /^['"]?([\p{L}\p{M} .]{2,40}?)['"]?\s+(?:na|nna|means|=|endral|enr
 const NICKNAME = /^([\p{L}\p{M} .]{2,60}?)(?:-?a|-?ai|ை)?\s+(?:naan|nan|naa)\s+['"]?([\p{L}\p{M} .]{2,40}?)['"]?\s*(?:nu|ndru|endru)\s+(?:kupduven|kupiduven|kooppiduven|solluven|kooduven)/u;
 const RECALL = /what\s+did\s+i\s+(tell|say|ask)|enna\s+sonnen|nyabagam\s+irukka|my\s+preferences|ennoda\s+(rules|preference|notes)|what\s+do\s+you\s+remember|enna\s+nyabagam/i;
 
+// "Kumar enakku 500 rooba tharanum" / "Kumar thara vendiya amount-la innum 500 serkkunga": a new credit, not a question.
+const THEY_OWE = /(?:enakku|ennaku)\b[\s\S]*\d[\s\S]*\b(?:tharanum|tharanam|thara\s*venum)\b|thara\s*vendiya\s*amount\S*\s*innum|\d[\d,.]*\s*(?:k\b|rooba\w*|rupees?|ruba\w*|rs\.?)?\s*(?:tharanum|tharanam)\s*$/;
+// "Naan Kumar-ku 500 rooba tharanum" / "Kumar-ku kudukka vendiya amount-la innum 500 serkkunga": what the owner owes.
+const I_OWE = /\bnaan\b[\s\S]*\d[\s\S]*\b(?:tharanum|kudukanum|kudukkanum|thara\s*venum|kudukka\s*venum)\b|kudukka\s*vendiya\s*amount\S*\s*innum/;
+
+/**
+ * Which way the money goes, from how the person was said and the verb (dataset 2, 12 Oct 2026):
+ *   still owed  (kudukanum / tharanum / varanum / vaanganum / vendiya / baaki iruku / tharala / kudukala / settle pannanum,
+ *                and adding to it: seru / kootti podu / adhigapaduthu / varavu vai)
+ *   already paid (kuduthutaan / kuduthuttaaru / kuduthen / kattittaaru / anuppitten / vandhuchu / settle pannitten / varavula podu)
+ * × "Kumar-ku / Kumaruku / குமாருக்கு" (to the person: the owner pays or owes) or not (the person pays or owes the owner).
+ */
+const STILL_OWED = /\b(?:kudukanum|kudukkanum|tharanum|tharanam|varanum|vaanganum|vendiya|tharala|kudukala|adhigapaduthu|pannanum)\b|baaki\s+iruku|kootti\s+podu|kooda\s+seru|\bseru\b|varavu\s+vai|kanakkula\s+podu|\bi\s+owe\b|\bowes\s+me\b|\bstill\s+owe/;
+const ALREADY_PAID = /\b(?:settle\s+pann(?:itaan|ittaan|itaru|ittaaru|inaan|itten|iten|en|inen)|clear\s+pann(?:itaan|ittaan|inaan|itten|iten)|(?:pay|transfer|neft|gpay|upi|imps|rtgs)\s+pann(?:en|inen|iten|itten|itaan|ittaan|an|aan|inaan|aaru|itaru|anga)|kattinen|kattinan|katti\s*tan|kattittaan|thandhutaanga|thandhutaan|thandhaan|thandhaaru|thanthutaan|kudthan|kudthaan|kudhuthan|kudhuthaan|anuppiachu|anuppiyaachu|anupiyaachu|anuppinaaru|anupinaaru|anuppinaar|pottan|pottaan|pottaaru|potten|adachitan|adachittaan|adachitten|kuduthutaan|kuduthuttaan|kuduthuttaaru|kuduthutaaru|kuduthaar|kuduthaaru|kuduthaan|kuduthan|kuduthaanga|kuduthen|kuduthuten|kuduthutten|koduthen|kattittaaru|kattinaan|kattitaan|kattinaar|anuppitten|anupitten|anupinen|anuppinen|anupinaan|anuppinaan|anuppichan|anuppichen|vandhuchu|vanthuchu|pannitten|panniten|paid|sent)\b|varavula\s+podu|selavula\s+(?:record|podu)|vaa?nginadhai|petradhai/;
+
+/** English: "I owe Kumar 500", "Kumar still hasn't paid me 500", "I sent 450 to Meena", "Record the 300 received from Mani". */
+function englishDirection(n: string): MoneyDirection | undefined {
+  if (/\bi\s+(?:still\s+)?haven'?t\s+paid\b|\bi\s+(?:still\s+)?owe\b|\bneed\s+to\s+(?:settle|pay)\b|\bpayable\s+to\b|\bwhat\s+i\s+owe\b|\bi\s+have\s+to\s+(?:give|pay)\b/.test(n)) return "I_OWE";
+  if (/\bstill\s+hasn'?t\s+paid\s+me\b|\bowes?\s+me\b|\bneed\s+to\s+(?:collect|get|receive)\b|\breceivable\b|\bowed\s+to\s+me\b|\bhas\s+to\s+(?:give|pay)\s+me\b/.test(n)) return "THEY_OWE";
+  if (/\b(?:paid|gave|sent)\s+me\b|\breceived\s+from\b|\bgot\s+\S+\s+(?:rupees\s+)?from\b/.test(n)) return "THEY_GAVE";
+  if (/\bi\s+(?:paid|sent|gave|settled)\b|\bpaid\s+to\b|\bsent\s+\S+\s+(?:rupees\s+)?to\b/.test(n)) return "I_GAVE";
+  return undefined;
+}
+
+export function directionFromCase(n: string, personCase: "DATIVE" | "FROM" | "PLAIN"): MoneyDirection | undefined {
+  if (/\d/.test(n) && !n.endsWith("?")) {
+    const en = englishDirection(n);
+    if (en) return en;
+  }
+  const toPerson = personCase === "DATIVE" || /\bi\s+(?:owe|paid|sent|gave)\b/.test(n);
+  if (STILL_OWED.test(n) && /\d/.test(n) && !n.endsWith("?")) return toPerson ? "I_OWE" : "THEY_OWE";
+  if (ALREADY_PAID.test(n)) {
+    if (/\b(?:paid|sent)\s+me\b/.test(n)) return "THEY_GAVE";
+    return toPerson ? "I_GAVE" : "THEY_GAVE";
+  }
+  return undefined;
+}
+
+/** A cash sale, an expense or a cash purchase with no person in it: "innaikku arisi 500 rooba selavaachu". */
+export function cashEntryOf(n: string): "SALE" | "EXPENSE" | "PURCHASE" | undefined {
+  if (/\bvithen\b|vithadhula|vithutten|\bvithom\b|\bsold\b|viyabaaram\s+aachu|\bsale\s+aachu|\bin\s+sales\b|\bfrom\s+selling\b/.test(n)) return "SALE";
+  if (/selav|\bspent\b|\bexpenses?\b|kharchu/.test(n)) return "EXPENSE";
+  if (/vaanginen|vaangiten|vaanga\b[\s\S]*aachu|\bbought\b|purchased|sarakku|cost\s+\S+\s+(?:rupees\s+)?to\s+buy|\bto\s+buy\b/.test(n)) return "PURCHASE";
+  // "irumbu kambiku 5000 rooba kuduthen", "current bill-ku 1250 pay pannadhai record pannunga": money paid for something.
+  if (/\b(?:kuduthen|kuduthuten|koduthen|paid)\b|pay\s+pannadhai|bill-?ku/.test(n)) return "EXPENSE";
+  return undefined;
+}
+
 function directionOf(n: string): MoneyDirection | undefined {
+  // "Kumar 3000 thaane tharanum?" checks the books; it is not a new entry.
+  const statement = /\d/.test(n) && !n.endsWith("?") && !/\b(?:thaane|thane|correct-?a|illaiya|ah|aa)\b/.test(n);
+  if (statement && I_OWE.test(n)) return "I_OWE";
+  if (statement && THEY_OWE.test(n)) return "THEY_OWE";
   if (THEY_GAVE.test(n)) return "THEY_GAVE";
   if (I_GAVE.test(n)) return "I_GAVE";
   if (COLLECTED.test(n)) return /saamaan|saman|goods|stock|items?|bill|sarakku/.test(n) ? "I_BOUGHT" : "I_TOOK";
@@ -78,7 +131,7 @@ export function actionFor(direction: MoneyDirection, kind?: PartyRef["kind"]): K
   // A supplier: paying them is a payment; anything they gave or I took from them is a purchase.
   if (kind === "SUPPLIER") return direction === "I_GAVE" ? "RECORD_PAYMENT" : "ADD_DEBIT";
   if (direction === "THEY_GAVE" || direction === "I_TOOK") return "RECORD_PAYMENT";
-  if (direction === "I_BOUGHT") return "ADD_DEBIT";
+  if (direction === "I_BOUGHT" || direction === "I_OWE") return "ADD_DEBIT";
   return "ADD_CREDIT";
 }
 
@@ -87,7 +140,9 @@ export function understand(input: UnderstandInput): Understanding {
   const lang = detectLang(text);
   const n = normalize(text);
   const cased = normalize(text, true);
-  const amounts = amountsIn(n);
+  const figures = amountsIn(n);
+  const spokenAmount = figures.length === 0 ? amountInWords(n) : undefined;
+  const amounts = spokenAmount !== undefined ? [spokenAmount] : figures;
   const base: Understanding = { lang, normalized: n, intent: "UNCLEAR", party: { status: "NONE" }, product: { status: "NONE" }, amounts };
   const is = (intent: KaiIntent, extra: Partial<Understanding> = {}): Understanding => ({ ...base, intent, ...extra });
 
@@ -148,8 +203,27 @@ export function understand(input: UnderstandInput): Understanding {
   }
   if (RECALL.test(n)) return is("RECALL");
 
-  const direction = directionOf(n);
+  // Who the money is about, and how they were said ("Kumaruku" / "Kumar kitta" / "Kumar").
+  const saidName = party.status === "FOUND" || party.status === "AMBIGUOUS" || party.status === "UNKNOWN" ? party.said : "";
+  const direction = (saidName ? directionFromCase(n, caseOfName(cased.toLowerCase(), saidName.toLowerCase())) : undefined) ?? directionOf(n);
   const asks = QUESTION.test(n) || n.endsWith("?");
+
+  // "Pudhu customer-ai add pannunga", "Kumar kanakkula potta thogaiya maathu", "padhivai azhichidu": no amount, not a draft.
+  const early = howTo(n);
+  // A feature Owner Note doesn't have ("5 percent discount", "invoice") or a stock change is never a person's entry,
+  // amount or not.
+  if (early === "UNSUPPORTED" || early === "STOCK") return is("HOW_TO", { howTo: early });
+  if (early && early !== "SALE" && early !== "EXPENSE" && early !== "PURCHASE" && amounts.length === 0) return is("HOW_TO", { howTo: early });
+
+  // A cash sale / expense / purchase with nobody in it is not a person's entry.
+  const guessedName = party.status === "UNKNOWN" && party.guessed === true;
+  if ((party.status === "NONE" || guessedName) && amounts.length > 0 && !(PRONOUN.test(n) && turn.lastParty)) {
+    const cash = cashEntryOf(n);
+    // A guessed lower-case "name" gives way to a clear sale / expense / purchase verb ("pencil 50 rooba vithen").
+    if (cash && (party.status === "NONE" || /vithen|vithadhula|\bsold\b|selav|\bspent\b|vaanginen|\bbought\b|to\s+buy|vaanga\b/.test(n))) {
+      return is("HOW_TO", { howTo: cash });
+    }
+  }
 
   // Arithmetic is done by code. Not when the numbers are a payment ("Kumar 500 + 200 kuduthaan" is asked about below).
   const expression = expressionIn(n);
@@ -158,20 +232,45 @@ export function understand(input: UnderstandInput): Understanding {
   // A write: a person, which way the money went, and how much.
   const pronounParty = PRONOUN.test(n) && turn.lastParty ? turn.lastParty : undefined;
   const writeParty: PartyMatch = party.status === "NONE" && pronounParty ? { status: "FOUND", party: pronounParty, said: "" } : party;
-  if (direction && !(asks && amounts.length === 0) && writeParty.status !== "NONE") {
+  // "cash received-ai kaattunga" shows; it doesn't write. A write needs an amount or a write verb.
+  const shows = /\b(?:kaattunga|kaattu|kaatu|show|check|calculate|explain|list|thedunga|search|compare|report-aa)\b/.test(n);
+  if (direction && !(asks && amounts.length === 0) && !(shows && amounts.length === 0) && writeParty.status !== "NONE") {
     const kind = writeParty.status === "FOUND" ? writeParty.party.kind : undefined;
     return is(actionFor(direction, kind), { party: writeParty, direction, amount: amounts.length === 1 ? amounts[0] : undefined, product });
   }
 
-  if (OVERDUE.test(n)) return is("OVERDUE");
-  if (TODAY.test(n)) return is("TODAY_SUMMARY");
-  if (CASH_FLOW.test(n)) return is("CASH_FLOW");
+  // A write Kai doesn't take from chat ("Pudhu customer-ai add pannunga", "entry-ai delete pannunga") or a feature
+  // Owner Note doesn't have (invoice, Excel export…): said plainly with where to do it — never a wrong answer.
+  const how = howTo(n);
+  if (how && !(how !== "UNSUPPORTED" && amounts.length > 0 && party.status !== "NONE")) return is("HOW_TO", { howTo: how });
+
+  if (OVERDUE.test(n) && party.status === "NONE") return is("OVERDUE");
   if (LOW_STOCK.test(n)) return is("LOW_STOCK", { product });
+  if (CASH_FLOW.test(n)) return is("CASH_FLOW");
+  if (TODAY.test(n) && !reportTopic(n)) return is("TODAY_SUMMARY");
 
   // A person's balance: by name, by "avan / he" after one was talked about, or "evlo?" on its own right after.
   if (party.status === "FOUND" || party.status === "AMBIGUOUS") {
     if (product.status === "FOUND" && STOCK.test(n) && !BALANCE.test(n)) return is("STOCK", { product });
     return is("PARTY_BALANCE", { party, claimedAmount: amounts[0] });
+  }
+
+  // A report: "customer pending amount-ai kaattunga", "கடந்த மாத பண வரவு", "show me last week's purchase details".
+  // "How to increase sales in Diwali?" is advice, not a report on the shop's sales.
+  const advice = /\bhow\s+(?:to|can|do\s+i|should)\b|eppadi|epdi|\btips?\b|\bideas?\b|improve|increase|boost|adhigap/.test(n) && !/how\s+much|how\s+many|evlo/.test(n);
+  if (!advice && (product.status !== "FOUND" || !STOCK.test(n))) {
+    const topic = reportTopic(n);
+    // "Kumaroda pazhaya kanakku kaatu": one person's history — said back plainly when they aren't in the books.
+    // "Kumar enakku thara vendiya amount-ai kaattunga" with no Kumar in the books: about that person, said back plainly.
+    if (party.status === "UNKNOWN" && !party.guessed && (topic === "HISTORY" || topic === "RECEIVABLE" || topic === "PAYABLE" || topic === "PENDING")) return is("PARTY_BALANCE", { party });
+    // "Naan suppliers-ku evlo kudukanum" / "yaar yaar kitta panam varanum": the totals, by their verbs.
+    if ((topic === undefined || topic === "SUPPLIERS" || topic === "CUSTOMERS" || topic === "SUMMARY") && party.status === "NONE" && !pronounParty) {
+      if (PAYABLE.test(n) || /\bnaan\b[\s\S]*\b(?:tharanum|kudukanum|kudukkanum)\b/.test(n)) return is("TOTAL_PAYABLE");
+      if (RECEIVABLE.test(n) && !OVERDUE.test(n)) return is("TOTAL_RECEIVABLE");
+    }
+    if (topic === "RECEIVABLE") return is("TOTAL_RECEIVABLE");
+    if (topic === "PAYABLE") return is("TOTAL_PAYABLE");
+    if (topic) return is("REPORT", { report: { topic, period: reportPeriod(n, topic) } });
   }
   if (pronounParty && (BALANCE.test(n) || asks)) {
     return is("PARTY_BALANCE", { party: { status: "FOUND", party: pronounParty, said: "" }, claimedAmount: amounts[0] });
