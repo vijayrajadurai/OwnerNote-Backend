@@ -23,6 +23,14 @@ const businessSchema = z.object({
   ownerName: z.string().min(2).max(100),
   businessName: z.string().min(2).max(150),
   category: z.enum(BUSINESS_CATEGORIES),
+  // The app's master-list codes the owner picked (several allowed). Not a fixed list here, so the app can add
+  // categories without a backend change; `category` above stays the value older features read.
+  categories: z
+    .array(z.string().regex(/^[A-Z][A-Z0-9_]{1,59}$/))
+    .max(40)
+    .transform((codes) => Array.from(new Set(codes)))
+    .optional(),
+  otherCategoryName: z.string().trim().min(2).max(60).nullish(),
   city: z.string().min(2).max(100),
   runningSinceYear: z.number().int().min(1950).max(new Date().getFullYear()).optional(),
   monthlyVolumeApprox: z.number().nonnegative().optional(),

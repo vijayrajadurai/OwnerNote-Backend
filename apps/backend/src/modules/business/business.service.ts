@@ -6,6 +6,8 @@ export interface BusinessInput {
   ownerName: string;
   businessName: string;
   category: BusinessCategory;
+  categories?: string[];
+  otherCategoryName?: string | null;
   city: string;
   runningSinceYear?: number;
   monthlyVolumeApprox?: number;
