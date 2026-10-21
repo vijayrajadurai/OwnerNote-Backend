@@ -301,9 +301,9 @@ async function write(
     return {
       intent,
       text: say(lang, {
-        ta: `${rupees(amount)} — ஒரு entry-க்கு ₹1 கோடி வரை தான். Amount சரியா-னு பாருங்க.`,
-        tl: `${rupees(amount)} — oru entry-ku ₹1 crore varai thaan. Amount sari-yaa-nu paarunga.`,
-        en: `${rupees(amount)} — one entry can be at most ₹1 crore. Please check the amount.`,
+        ta: `${rupees(amount)} — ஒரு entry-க்கு ₹99 கோடி வரை தான். Amount சரியா-னு பாருங்க.`,
+        tl: `${rupees(amount)} — oru entry-ku ₹99 crore varai thaan. Amount sari-yaa-nu paarunga.`,
+        en: `${rupees(amount)} — one entry can be at most ₹99 crore. Please check the amount.`,
       }),
     };
   }
