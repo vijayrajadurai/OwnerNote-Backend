@@ -8,6 +8,7 @@ export interface BusinessInput {
   category: BusinessCategory;
   categories?: string[];
   otherCategoryName?: string | null;
+  businessTypes?: string[];
   city: string;
   runningSinceYear?: number;
   monthlyVolumeApprox?: number;

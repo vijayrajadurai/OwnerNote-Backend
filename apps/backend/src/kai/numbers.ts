@@ -3,8 +3,8 @@
  * The evaluator is a small recursive-descent parser over numbers and + - * / % ( ); nothing is ever eval'd.
  */
 
-/** Kai's write limit, the same as the app's (₹1 crore). */
-export const MAX_LEDGER_AMOUNT = 10_000_000;
+/** Kai's write limit, the same as the app's (₹99 crore — owner, 21 Oct 2026: "1 crore la irunthu 99 crore varaikkum"). */
+export const MAX_LEDGER_AMOUNT = 990_000_000;
 
 const MULTIPLIERS: Record<string, number> = {
   k: 1_000, thousand: 1_000, aayiram: 1_000, ayiram: 1_000, aayram: 1_000,
@@ -24,7 +24,7 @@ export function amountsIn(text: string): number[] {
     const digits = m[1].replace(/,/g, "");
     const after = text.slice((m.index ?? 0) + m[0].length);
     if (/^\s*(?:-?\s*(?:aam|am|th|st|nd|rd)\b|\s*(?:thethi|thedhi|date|tharikh))/i.test(after)) continue;
-    if (!m[2] && !m[1].includes(",") && digits.replace(".", "").length >= 9) continue; // a phone number
+    if (!m[2] && !m[1].includes(",") && digits.replace(".", "").length >= 10) continue; // a phone number (990000000 is ₹99 crore)
     let value = Number(digits);
     if (!Number.isFinite(value)) continue;
     if (m[2]) value *= MULTIPLIERS[m[2].toLowerCase()] ?? 1;
