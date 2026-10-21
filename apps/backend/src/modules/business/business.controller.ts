@@ -27,10 +27,16 @@ const businessSchema = z.object({
   // categories without a backend change; `category` above stays the value older features read.
   categories: z
     .array(z.string().regex(/^[A-Z][A-Z0-9_]{1,59}$/))
-    .max(40)
+    .max(80)
     .transform((codes) => Array.from(new Set(codes)))
     .optional(),
   otherCategoryName: z.string().trim().min(2).max(60).nullish(),
+  // What the business does (several allowed); left out by an older app = kept as it is.
+  businessTypes: z
+    .array(z.enum(["SERVICE", "RETAIL", "WHOLESALE"]))
+    .max(3)
+    .transform((types) => Array.from(new Set(types)))
+    .optional(),
   city: z.string().min(2).max(100),
   runningSinceYear: z.number().int().min(1950).max(new Date().getFullYear()).optional(),
   monthlyVolumeApprox: z.number().nonnegative().optional(),

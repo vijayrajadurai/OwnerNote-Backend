@@ -88,8 +88,11 @@ model Business {
   /// Every product business category the owner picked at setup (the app's master list codes, e.g. GROCERY_FMCG,
   /// BAKERY_CONFECTIONERY). `category` stays the one the older features read, derived from the first pick.
   categories        String[]          @default([])
-  /// The owner's own name for "Other Product Businesses".
+  /// The owner's own name for "Other Product Businesses" / "Other Services".
   otherCategoryName String?
+  /// What the business does (several allowed): SERVICE, RETAIL, WHOLESALE (a distributor is WHOLESALE). The app shows
+  /// the features each type needs. Empty for a business set up before the types (the app reads them from its categories).
+  businessTypes     String[]          @default([])
   city              String
   runningSinceYear  Int?
   monthlyVolumeApprox Decimal?        @db.Decimal(14, 2)
