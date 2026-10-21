@@ -53,7 +53,7 @@ describe("business categories", () => {
 
   it("refuses a code that is not a category code, and an empty Other name", async () => {
     const token = await authenticate(app, phone);
-    for (const bad of [["grocery fmcg"], ["1ABC"], [""], Array.from({ length: 41 }, (_, i) => `CAT_${i}`)]) {
+    for (const bad of [["grocery fmcg"], ["1ABC"], [""], Array.from({ length: 81 }, (_, i) => `CAT_${i}`)]) {
       await request(app).put("/business").set("Authorization", `Bearer ${token}`).send({ ...base, categories: bad }).expect(400);
     }
     await request(app).put("/business").set("Authorization", `Bearer ${token}`).send({ ...base, otherCategoryName: " " }).expect(400);
